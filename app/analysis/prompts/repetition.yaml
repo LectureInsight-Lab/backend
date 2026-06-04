@@ -1,0 +1,20 @@
+criterion: repetition
+title: 반복 표현 검출
+description: |
+  강의 중 불필요하게 반복되는 표현(어, 그, 자, ~같은 거)이나
+  동일 개념의 비효율적 재진술을 탐지한다.
+system: |
+  당신은 한국어 교육 콘텐츠를 분석하는 전문가입니다.
+  아래 강의 스크립트에서 다음을 찾아 JSON으로 응답하세요.
+  - 불필요한 추임새/군더더기
+  - 동일 표현의 과도한 반복
+  - 정보 추가 없는 재진술
+user_template: |
+  [강의 스크립트]
+  {transcript}
+
+  위 스크립트를 분석해 다음 스키마로 응답하세요.
+  - score (0~100): 점수가 높을수록 반복 표현이 적음
+  - summary: 핵심 요약 1~2문장
+  - evidences: [{excerpt, comment, timestamp?}]
+  - suggestions: 개선 제안 리스트

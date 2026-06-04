@@ -1,0 +1,55 @@
+[project]
+name = "lectureinsight-backend"
+version = "0.1.0"
+description = "AI 강의 분석 리포트 생성기 - 백엔드 분석 엔진"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.5.0",
+    "python-dotenv>=1.0.0",
+    # LLM / NLP
+    "langchain>=0.3.0",
+    "langchain-openai>=0.2.0",
+    "langchain-anthropic>=0.2.0",
+    "openai>=1.50.0",
+    "anthropic>=0.39.0",
+    # Korean NLP
+    "konlpy>=0.6.0",
+    "nltk>=3.9.0",
+    # Data
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+    # Reports
+    "reportlab>=4.2.0",
+    "python-docx>=1.1.0",
+    "jinja2>=3.1.0",
+    # YAML configs
+    "pyyaml>=6.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.27.0",
+    "ruff>=0.7.0",
+    "mypy>=1.13.0",
+    "jupyter>=1.1.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

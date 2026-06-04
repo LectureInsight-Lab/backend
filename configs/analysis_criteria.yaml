@@ -1,0 +1,28 @@
+# 분석 항목과 가중치 정의
+# 클라이언트 체크리스트 수령 후 항목/가중치 재조정 예정
+
+criteria:
+  - key: repetition
+    label: 반복 표현
+    weight: 0.15
+    prompt: app/analysis/prompts/repetition.yaml
+
+  - key: clarity
+    label: 설명 명확성
+    weight: 0.30
+    prompt: app/analysis/prompts/clarity.yaml
+
+  - key: examples
+    label: 예시 적절성
+    weight: 0.20
+    prompt: app/analysis/prompts/examples.yaml
+
+  - key: question
+    label: 질문 유도 패턴
+    weight: 0.20
+    prompt: app/analysis/prompts/question.yaml
+
+  - key: inappropriate
+    label: 부적절 표현
+    weight: 0.15
+    prompt: app/analysis/prompts/inappropriate.yaml
