@@ -26,15 +26,34 @@ class Utterance(BaseModel):
     seconds_from_start: int      # 강의 시작 후 경과 초
 
 
+class Session(BaseModel):
+    """한 세션(예: 오전/오후) 단위 묶음.
+
+    한 파일에 오전·오후 세션이 합쳐져 있으므로 30분 이상 갭으로 분리한다.
+    """
+
+    session_index: int                # 0, 1, ...
+    label: str                        # "morning" / "afternoon" / "session_N"
+    start_timestamp: str
+    end_timestamp: str
+    all_lines: list[Utterance]
+    intro_lines: list[Utterance]      # 세션 시작 후 N분
+    middle_lines: list[Utterance]
+    outro_lines: list[Utterance]      # 세션 종료 전 M분
+
+
 class LectureDocument(BaseModel):
     """전처리된 강의 한 편."""
 
     lecture_date: str            # "2026-02-02"
     instructor_id: str
     all_lines: list[Utterance]
-    intro_lines: list[Utterance]      # 시작 후 20분
-    middle_lines: list[Utterance]     # 중간
-    outro_lines: list[Utterance]      # 종료 전 15분
+    # 세션 단위 분리 (오전/오후) — discrete 항목(4,5,8 등) 평가용
+    sessions: list[Session] = Field(default_factory=list)
+    # 파일 평탄화 — 기존 다운스트림(embedder/analyzer) 호환
+    intro_lines: list[Utterance] = Field(default_factory=list)
+    middle_lines: list[Utterance] = Field(default_factory=list)
+    outro_lines: list[Utterance] = Field(default_factory=list)
     # 보조 통계 (BoW 입력)
     filler_word_ratio: float = 0.0    # 추임새 비율
     avg_line_gap_seconds: float = 0.0 # 발화 간 평균 간격

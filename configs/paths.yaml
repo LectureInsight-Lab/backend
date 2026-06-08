@@ -1,0 +1,16 @@
+# ─────────────────────────────────────────────────────────────────────
+# 외부 데이터 경로 참조
+# - 보안상 실제 강의 데이터는 repo 안으로 복사하지 않는다.
+# - 이 파일은 로컬 머신 절대 경로를 포함하므로 **커밋 금지**.
+#   배포/공유 시에는 paths.example.yaml 만 두고 본 파일은 .gitignore.
+# ─────────────────────────────────────────────────────────────────────
+
+data:
+  # STT 강의 스크립트 디렉터리 (.txt 다수)
+  stt_dir: "/Users/sepgom/gom_programmer/멋쟁이사자 NLP/인턴십/NLP 과제 1 - AI 강의 분석 리포트 생성기/강의 스크립트"
+
+  # 강의 메타데이터 CSV (course_id, date, time, subject, instructor 등)
+  metadata_csv: "/Users/sepgom/gom_programmer/멋쟁이사자 NLP/인턴십/NLP 과제 1 - AI 강의 분석 리포트 생성기/강의 메타데이터.csv"
+
+# STT 파일명 규칙: {date}_{course_id}.txt
+stt_filename_pattern: "{date}_{course_id}.txt"
