@@ -1,0 +1,151 @@
+# ─────────────────────────────────────────────────────────────────────
+# 18개 강의력 체크리스트 (v2)
+# Paper #4 분류: discrete(6) vs high_inference(12)
+# context_strategy: intro | middle | outro | full_sample | keyword
+# ─────────────────────────────────────────────────────────────────────
+
+# 카테고리별 가중치 (종합 점수 산출용)
+category_weights:
+  structure:      0.25    # 강의 도입 및 구조
+  concept:        0.25    # 개념 설명 명확성
+  practice:       0.20    # 예시 및 실습 연계
+  language:       0.15    # 언어 표현 품질
+  interaction:    0.15    # 수강생 상호작용
+
+items:
+  # ── 언어 표현 품질 (language) ──────────────────────────────
+  - id: 1
+    name: 불필요한 반복 표현
+    category: language
+    item_type: high_inference
+    context_strategy: full_sample
+    prompt: app/analysis/prompts/items/01_repetition.yaml
+
+  - id: 2
+    name: 발화 완결성
+    category: language
+    item_type: high_inference
+    context_strategy: full_sample
+    prompt: app/analysis/prompts/items/02_completeness.yaml
+
+  - id: 3
+    name: 언어 일관성
+    category: language
+    item_type: high_inference
+    context_strategy: full_sample
+    prompt: app/analysis/prompts/items/03_consistency.yaml
+
+  # ── 강의 도입 및 구조 (structure) ──────────────────────────
+  - id: 4
+    name: 학습 목표 안내
+    category: structure
+    item_type: discrete
+    context_strategy: intro
+    prompt: app/analysis/prompts/items/04_learning_goal.yaml
+
+  - id: 5
+    name: 전날 복습 연계
+    category: structure
+    item_type: discrete
+    context_strategy: intro
+    prompt: app/analysis/prompts/items/05_review_link.yaml
+
+  - id: 6
+    name: 설명 순서
+    category: structure
+    item_type: high_inference
+    context_strategy: full_sample
+    prompt: app/analysis/prompts/items/06_explanation_order.yaml
+
+  - id: 7
+    name: 핵심 강조
+    category: structure
+    item_type: high_inference
+    context_strategy: middle
+    prompt: app/analysis/prompts/items/07_emphasis.yaml
+
+  - id: 8
+    name: 마무리 요약
+    category: structure
+    item_type: discrete
+    context_strategy: outro
+    prompt: app/analysis/prompts/items/08_summary.yaml
+
+  # ── 개념 설명 명확성 (concept) ──────────────────────────────
+  - id: 9
+    name: 개념 정의
+    category: concept
+    item_type: high_inference
+    context_strategy: middle
+    prompt: app/analysis/prompts/items/09_concept_definition.yaml
+
+  - id: 10
+    name: 비유/예시 활용
+    category: concept
+    item_type: high_inference
+    context_strategy: middle
+    prompt: app/analysis/prompts/items/10_analogy.yaml
+
+  - id: 11
+    name: 선행 개념 확인
+    category: concept
+    item_type: high_inference
+    context_strategy: intro
+    prompt: app/analysis/prompts/items/11_prerequisite.yaml
+
+  - id: 12
+    name: 발화 속도 적절성
+    category: concept
+    item_type: high_inference
+    context_strategy: full_sample
+    prompt: app/analysis/prompts/items/12_pace.yaml
+
+  # ── 예시 및 실습 연계 (practice) ───────────────────────────
+  - id: 13
+    name: 예시 적절성
+    category: practice
+    item_type: high_inference
+    context_strategy: middle
+    prompt: app/analysis/prompts/items/13_example_fit.yaml
+
+  - id: 14
+    name: 실습 연계
+    category: practice
+    item_type: high_inference
+    context_strategy: keyword
+    prompt: app/analysis/prompts/items/14_practice_link.yaml
+
+  - id: 15
+    name: 오류 대응
+    category: practice
+    item_type: high_inference
+    context_strategy: keyword
+    prompt: app/analysis/prompts/items/15_error_handling.yaml
+
+  # ── 수강생 상호작용 (interaction) ──────────────────────────
+  - id: 16
+    name: 이해 확인 질문
+    category: interaction
+    item_type: discrete
+    context_strategy: keyword
+    prompt: app/analysis/prompts/items/16_check_question.yaml
+
+  - id: 17
+    name: 참여 유도
+    category: interaction
+    item_type: discrete
+    context_strategy: keyword
+    prompt: app/analysis/prompts/items/17_engagement.yaml
+
+  - id: 18
+    name: 질문 응답 충분성
+    category: interaction
+    item_type: discrete
+    context_strategy: keyword
+    prompt: app/analysis/prompts/items/18_answer_quality.yaml
+
+# 강의 구간 분리 기준 (preprocessor 사용)
+segments:
+  intro_minutes: 20             # 시작 후 20분
+  outro_minutes: 15             # 종료 전 15분
+  # middle = intro와 outro 사이

@@ -1,0 +1,59 @@
+[project]
+name = "lectureinsight-backend"
+version = "0.2.0"
+description = "AI 강의 분석 리포트 생성기 - RAG + BoW 앙상블 백엔드 (v2)"
+requires-python = ">=3.11"
+dependencies = [
+    # Web / API
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.5.0",
+    "python-dotenv>=1.0.0",
+    # LLM / Embedding
+    "openai>=1.50.0",
+    "tenacity>=9.0.0",            # 재시도 (LLM 호출 안정화)
+    # NLP / Data
+    "numpy>=1.26.0",
+    "pandas>=2.2.0",
+    "scikit-learn>=1.5.0",        # 코사인 유사도, 선형 회귀
+    # Korean NLP
+    "konlpy>=0.6.0",
+    "nltk>=3.9.0",
+    # Visualization
+    "matplotlib>=3.9.0",
+    "plotly>=5.24.0",
+    # Reports
+    "jinja2>=3.1.0",
+    "python-docx>=1.1.0",
+    # Dashboard
+    "streamlit>=1.40.0",
+    # Configs / Logs
+    "pyyaml>=6.0.0",
+    "loguru>=0.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.27.0",
+    "ruff>=0.7.0",
+    "mypy>=1.13.0",
+    "jupyter>=1.1.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

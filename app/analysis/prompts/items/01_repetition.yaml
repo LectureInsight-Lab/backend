@@ -1,0 +1,42 @@
+# 항목 1: 불필요한 반복 표현 (high_inference)
+# 컨텍스트 전략: full_sample (RAG로 전체에서 샘플링)
+
+id: 1
+name: 불필요한 반복 표현
+category: language
+item_type: high_inference
+context_strategy: full_sample
+
+description: |
+  강의 중 의미 없는 추임새("어", "음", "그~")나 동일 단어의 과도한 반복,
+  정보 추가 없는 재진술이 강의 흐름을 저해하는지 평가.
+
+criteria:
+  - 필러 단어 빈도가 강의 청취에 방해될 정도인가
+  - 동일 단어를 3회 이상 연속 사용하는 패턴이 잦은가
+  - 같은 내용을 다른 정보 추가 없이 반복하는가
+
+user_template: |
+  [평가 항목]
+  불필요한 반복 표현
+
+  [평가 기준]
+  - 추임새 과다 사용
+  - 동일 단어 연속 반복
+  - 정보 추가 없는 재진술
+
+  [Few-shot 예시]
+  {few_shot_examples}
+
+  [BoW 카운트 — 부정 지표]
+  - 필러 단어 등장: {negative_count} 회
+  - 필러 비율(eda): {filler_word_ratio}
+
+  [강의 발췌 — RAG top-{top_k} (반복 패턴이 의심되는 청크)]
+  {rag_context}
+
+  주의: 본 항목은 전역 패턴이 중요합니다. 일부 구간만 보고 판단하지 말고
+  BoW 카운트와 필러 비율을 함께 고려하세요.
+
+  시스템 프롬프트의 출력 스키마에 맞춰 JSON 으로 답하세요.
+  (점수: 높을수록 반복 표현이 적음)

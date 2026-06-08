@@ -1,0 +1,27 @@
+# ─────────────────────────────────────────────────────────────────────
+# Few-shot 예시 (Paper #2)
+# 각 체크리스트 항목별 "좋은 예 / 나쁜 예" 1개씩.
+# analyzer.py 가 프롬프트 조립 시 주입.
+# 정확도 10~15% 향상 효과 (Paper #2 보고).
+# ─────────────────────────────────────────────────────────────────────
+
+examples:
+  4:  # 학습 목표 안내
+    good:
+      score: 4.5
+      transcript: |
+        오늘은 자바 NIO 패키지를 배울 거예요. 구체적으로 IO, NIO, NIO2
+        세 가지 패키지의 차이점과 각각 언제 써야 하는지 이해하는 게 오늘 목표입니다.
+      strengths: 학습 목표를 구체적으로 세 가지로 나열함
+      improvements: 왜 이 내용이 중요한지 동기 부여를 추가하면 더 좋음
+      confidence: 0.9
+    bad:
+      score: 1.5
+      transcript: |
+        그래서 이제 시작하도록 하겠습니다. 지난번에 했던 거 이어서...
+      strengths: 해당 없음
+      improvements: 강의 시작 시 오늘 배울 주제와 목표를 명시적으로 안내해야 함
+      confidence: 0.85
+
+  # TODO: 나머지 17개 항목 예시 추가
+  # 구조 동일: {good, bad} × {score, transcript, strengths, improvements, confidence}
