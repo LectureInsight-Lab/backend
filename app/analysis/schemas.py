@@ -7,9 +7,16 @@
       → LectureDocument          (preprocessor)
       → BehaviorProfile          (behavior_tagger, 18항목 BoW)
       → LectureIndex             (embedder, 청크 + 임베딩)
-      → ItemAnalysis × 18        (analyzer, LLM raw)
-      → ItemScore × 18           (ensemble, 최종 점수)
+      → ItemAnalysis x 18        (analyzer, LLM raw)
+      → ItemScore x 18           (ensemble, 최종 점수)
       → InstructorScorecard      (scorer, 카테고리 + 트렌드)
+
+[이수민 - 2026-06-15]
+Sentence 모델 추가 — STT 라인 파편을 재구성한 '문장' 단위.
+문장화(preprocessing/sentencizer.py): 갭 기반 발화 세그먼트 분리 → kss 문장 분리
+→ Mecab EF/EC 완결성 판정. 항목 2(발화 완결성)·3(언어 일관성)의 입력 단위.
+LectureDocument 에 편입 — build_document(with_sentences=True) 시 sentences/
+completeness_rate/consistency_ratio/violation_count 채워짐. 점수화(1~5)는 스코어러 몫.
 """
 from datetime import datetime
 
@@ -42,6 +49,27 @@ class Session(BaseModel):
     outro_lines: list[Utterance]      # 세션 종료 전 M분
 
 
+# ─── 1단계(보강): 문장 재구성 산출물 (LectureDocument 이전에 정의) ──
+class Sentence(BaseModel):
+    """STT 라인 파편을 재구성한 '문장' 단위 (sentencizer 산출).
+
+    STT 는 `<HH:MM:SS> id: text` 라인이라 문장이 아니다. 갭 기반 세그먼트 분리 →
+    kss 문장 분리 → Mecab EF/EC 판정으로 만든다. 항목 2·3 의 입력.
+    """
+
+    text: str
+    segment_index: int                 # 소속 발화 세그먼트 인덱스
+    start_timestamp: str               # 문장 첫 라인 타임스탬프
+    end_timestamp: str                 # 문장 마지막 라인 타임스탬프
+    start_seconds: int                 # 첫 라인 경과초
+    end_seconds: int                   # 마지막 라인 경과초
+    utterance_indices: list[int] = Field(default_factory=list)  # 원본 all_lines 인덱스
+    ends_with_gap: bool = False        # 세그먼트 끝(뒤 갭 > 임계값) → 발화 끊김 후보
+    ending_morph: str | None = None    # 마지막 실질 형태소 표면형
+    ending_tag: str | None = None      # 마지막 실질 형태소 품사 (EF/EC/...)
+    is_complete: bool | None = None    # EF=True, EC 등=False, 미판정(Mecab off)=None
+
+
 class LectureDocument(BaseModel):
     """전처리된 강의 한 편."""
 
@@ -57,6 +85,12 @@ class LectureDocument(BaseModel):
     # 보조 통계 (BoW 입력)
     filler_word_ratio: float = 0.0    # 추임새 비율
     avg_line_gap_seconds: float = 0.0 # 발화 간 평균 간격
+    # ── 항목 2·3 원지표 + 공통 입력 (with_sentences=True 시 채워짐) ──
+    # 점수(1~5) 아님 — 밴드 적용은 스코어러/통합 담당 몫.
+    sentences: list[Sentence] = Field(default_factory=list)   # 항목 2·3·9·10 공통 입력
+    completeness_rate: float = 0.0    # 항목 2 원지표 (완결 문장 %)
+    consistency_ratio: float = 0.0    # 항목 3 원지표 (지배 말투 %)
+    violation_count: int = 0          # 항목 3 원지표 (비지배 말투 문장 수)
 
 
 # ─── 2-A단계: BoW 행동 태깅 산출물 ───────────────────────────

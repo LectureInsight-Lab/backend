@@ -13,6 +13,11 @@ STT 포맷: ``<HH:MM:SS> speaker_id: 발화 텍스트``
 산출물:
 - ``Utterance`` 리스트 → 세션 묶음 → intro/middle/outro 슬라이스
 - ``LectureDocument`` 에는 세션 단위 + 파일 평탄화 두 버전을 모두 채움.
+
+[이수민 - 2026-06-15]
+build_document(with_sentences=True) 추가 — 문장화(sentencizer)·말투(formality)로
+sentences / completeness_rate(항목2) / consistency_ratio·violation_count(항목3) 채움.
+기본 False (kss+Mecab 비용 회피, 기존 경량 경로 유지). 점수화(1~5)는 스코어러 몫.
 """
 from __future__ import annotations
 
@@ -23,7 +28,7 @@ import yaml
 
 from app.analysis.schemas import LectureDocument, Session, Utterance
 from app.core.paths import read_stt
-from app.preprocessing import eda
+from app.preprocessing import eda, formality, sentencizer
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CHECKLIST_CONFIG = PROJECT_ROOT / "configs" / "checklist.yaml"
@@ -157,8 +162,15 @@ def build_document(
     instructor_id: str,
     intro_minutes: int | None = None,
     outro_minutes: int | None = None,
+    with_sentences: bool = False,
 ) -> LectureDocument:
-    """STT 원문을 통째로 전처리해 ``LectureDocument`` 반환."""
+    """STT 원문을 통째로 전처리해 ``LectureDocument`` 반환.
+
+    ``with_sentences=True`` 면 문장화(sentencizer)·말투(formality)까지 수행해
+    sentences / completeness_rate(항목 2) / consistency_ratio·violation_count(항목 3)
+    를 채운다. kss+Mecab 비용(~2~5초/강의)이 있어 기본은 False (경량 경로 유지).
+    점수(1~5)는 산출하지 않음 — 밴드 적용은 스코어러 몫.
+    """
     if intro_minutes is None or outro_minutes is None:
         cfg_intro, cfg_outro = load_segment_config()
         intro_minutes = intro_minutes if intro_minutes is not None else cfg_intro
@@ -188,6 +200,17 @@ def build_document(
     flat_middle = [u for s in sessions for u in s.middle_lines]
     flat_outro = [u for s in sessions for u in s.outro_lines]
 
+    # 항목 2·3 원지표 (옵션) — 문장화 → 완결성 → 말투 일관성
+    sentences: list = []
+    completeness = consistency = 0.0
+    violations = 0
+    if with_sentences:
+        sentences = sentencizer.build_sentences(utterances)
+        completeness = sentencizer.completeness_rate(sentences)
+        profile = formality.formality_profile(sentences)
+        consistency = profile["consistency_ratio"]
+        violations = profile["violation_count"]
+
     return LectureDocument(
         lecture_date=lecture_date,
         instructor_id=instructor_id,
@@ -198,10 +221,19 @@ def build_document(
         outro_lines=flat_outro,
         filler_word_ratio=eda.filler_word_ratio(utterances),
         avg_line_gap_seconds=eda.avg_line_gap_seconds(utterances),
+        sentences=sentences,
+        completeness_rate=completeness,
+        consistency_ratio=consistency,
+        violation_count=violations,
     )
 
 
-def build_document_from_paths(lecture_date: str, course_id: str, instructor_id: str) -> LectureDocument:
+def build_document_from_paths(
+    lecture_date: str, course_id: str, instructor_id: str, with_sentences: bool = False
+) -> LectureDocument:
     """``configs/paths.yaml`` 의 stt_dir 에서 파일을 찾아 빌드."""
     raw_text = read_stt(lecture_date, course_id)
-    return build_document(raw_text, lecture_date=lecture_date, instructor_id=instructor_id)
+    return build_document(
+        raw_text, lecture_date=lecture_date, instructor_id=instructor_id,
+        with_sentences=with_sentences,
+    )

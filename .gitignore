@@ -14,6 +14,9 @@ outputs/*
 *.key
 credentials.json
 
+# Local path config (로컬 절대경로 포함 — 커밋 금지, paths.example.yaml 참고)
+configs/paths.yaml
+
 # Python
 __pycache__/
 *.py[cod]

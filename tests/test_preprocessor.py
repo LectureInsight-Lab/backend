@@ -182,3 +182,28 @@ def test_real_02_13_two_sessions_and_pm_rollover():
     # 마지막 timestamp 는 24h 표기로 17~18시대
     last_hh = int(last.timestamp.split(":")[0])
     assert 13 <= last_hh <= 23
+
+
+# ── with_sentences 배선 (항목 2·3 핸드오프) ─────────────────
+def test_build_document_without_sentences_is_lean():
+    """기본(with_sentences=False)은 문장화 미수행 → 신규 필드 기본값."""
+    raw = "<09:00:00> a: 오늘은 자바를 배웁니다\n<09:00:05> a: 그래서 시작합니다\n"
+    doc = preprocessor.build_document(raw, lecture_date="2026-02-02", instructor_id="kim")
+    assert doc.sentences == []
+    assert doc.completeness_rate == 0.0
+    assert doc.consistency_ratio == 0.0
+    assert doc.violation_count == 0
+
+
+def test_build_document_with_sentences_populates():
+    """with_sentences=True → sentences/completeness_rate/consistency_ratio 채워짐."""
+    pytest.importorskip("kss")
+    pytest.importorskip("mecab")
+    raw = "<09:00:00> a: 오늘은 자바를 배웁니다\n<09:00:05> a: 그래서 이게 중요하고\n"
+    doc = preprocessor.build_document(
+        raw, lecture_date="2026-02-02", instructor_id="kim", with_sentences=True
+    )
+    assert len(doc.sentences) >= 1
+    assert 0.0 <= doc.completeness_rate <= 100.0
+    assert 0.0 <= doc.consistency_ratio <= 100.0
+    assert doc.violation_count >= 0
