@@ -20,8 +20,7 @@ dependencies = [
     # Korean NLP
     "konlpy>=0.6.0",
     "nltk>=3.9.0",
-    "kss>=4.0.0",                 # 문장 분리 (Korean Sentence Splitter)
-    "python-mecab-ko>=1.3.0",     # Mecab-ko 형태소 분석 (mecab-ko-dic 번들, EF/EC 판정)
+    "kiwipiepy>=0.17.0",          # Kiwi 형태소 분석 + 문장 분리 (EF/EC 판정) — Mecab+kss 대체 (2026-06-22)
     # Visualization
     "matplotlib>=3.9.0",
     "plotly>=5.24.0",
