@@ -8,11 +8,17 @@ data/metadata/*
 outputs/*
 !outputs/.gitkeep
 
+# Local config (경로 설정은 로컬 전용)
+configs/paths.yaml
+
 # Secrets
 .env
 .env.local
 *.key
 credentials.json
+
+# Local path config (로컬 절대경로 포함 — 커밋 금지, paths.example.yaml 참고)
+configs/paths.yaml
 
 # Python
 __pycache__/

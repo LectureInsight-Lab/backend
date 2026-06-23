@@ -17,9 +17,9 @@
 ## Stack
 
 - **Framework**: FastAPI (API) + Streamlit (대시보드)
-- **LLM**: OpenAI GPT-4o (`temperature=0.2`)
-- **Embedding**: OpenAI `text-embedding-3-small` (캐싱)
-- **NLP**: KoNLPy, NLTK, scikit-learn (코사인 유사도, 선형 회귀)
+- **LLM**: Google Gemini (`models/gemini-2.5-flash`, `temperature=0.2`)
+- **RAG**: 키워드 검색 (임베딩 없이 청크 토큰 오버랩 top-K)
+- **NLP**: Kiwi, scikit-learn (선형 회귀)
 - **Data**: pandas, numpy, pydantic v2
 - **Async**: asyncio + tenacity (18항목 병렬, 자동 재시도)
 - **Visualization**: matplotlib, plotly
@@ -83,7 +83,7 @@ backend/
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
-cp .env.example .env              # OPENAI_API_KEY 입력
+cp .env.example .env              # API_KEY (Gemini) 입력
 
 # API 서버
 uvicorn app.main:app --reload
@@ -187,7 +187,7 @@ flowchart TD
     G --> H
     D --> H
 
-    H -->|항목별 context_strategy 적용<br/>+ Few-shot + RAG top-K + BoW| I[LLM × 18<br/>GPT-4o, temp=0.2]
+    H -->|항목별 context_strategy 적용<br/>+ Few-shot + RAG top-K + BoW| I[LLM × 18<br/>Gemini, temp=0.2]
     I -->|JSON 구조화| J[LLMItemRaw × 18]
 
     J --> K[ensemble.ensemble_all]
@@ -286,10 +286,9 @@ outputs/*.html + outputs/*.docx
 `.env.example` 참고. 주요 변수:
 
 ```
-OPENAI_API_KEY=...
-LLM_MODEL=gpt-4o
+API_KEY=...                       # Gemini API key
+LLM_MODEL=models/gemini-2.5-flash
 LLM_TEMPERATURE=0.2
-EMBEDDING_MODEL=text-embedding-3-small
 RAG_CHUNK_LINES=15
 RAG_TOP_K=5
 ENSEMBLE_LLM_WEIGHT=0.70
@@ -301,7 +300,7 @@ CONFIDENCE_THRESHOLD=0.5
 
 - **보안**: 실제 강의 데이터는 절대 커밋 금지 (`data/`, `outputs/` 모두 gitignore)
 - **API 키**: `.env` 로만 관리, 코드에 하드코딩 금지
-- **임베딩 캐시**: 동일 강의 재분석 시 `data/processed/embeddings/{date}.json` 재사용
+- **RAG**: 임베딩 없이 청크 토큰 오버랩 기반 키워드 top-K 검색 (외부 임베딩 호출 없음)
 - **LLM 캐시**: 동일 청크 + 동일 프롬프트 = 동일 응답 → `.cache/llm` 에 저장
 - **인간 검토 표시**: 리포트에서 `confidence < 0.5` 항목은 "⚠ 인간 검토 권장" 으로 마킹
 

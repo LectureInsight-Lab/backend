@@ -1,0 +1,36 @@
+# 항목 5: 전날 복습 연계 (discrete)
+# 컨텍스트 전략: intro
+
+id: 5
+name: 전날 복습 연계
+category: structure
+item_type: discrete
+context_strategy: intro
+
+description: |
+  강의 시작 시 지난 시간/전날 내용을 짚어 오늘 내용과 연결했는가.
+
+criteria:
+  - 지난 강의 내용을 명시적으로 언급했는가
+  - 복습을 오늘 학습과 연결했는가
+  - 단순 인사가 아닌 내용 연계가 있었는가
+
+user_template: |
+  [평가 항목]
+  전날 복습 연계
+
+  [평가 기준]
+  - 지난 강의 내용을 명시적으로 언급했는가
+  - 복습을 오늘 학습과 연결했는가
+  - 단순 인사가 아닌 내용 연계가 있었는가
+
+  [Few-shot 예시]
+  {few_shot_examples}
+
+  [BoW 카운트]
+  - 긍정 지표 출현: {positive_count} 회
+
+  [강의 발췌 — RAG top-{top_k}]
+  {rag_context}
+
+  위 정보를 종합하여 시스템 프롬프트의 출력 스키마에 맞춰 JSON 으로 답하세요.

@@ -10,8 +10,8 @@ dependencies = [
     "pydantic>=2.9.0",
     "pydantic-settings>=2.5.0",
     "python-dotenv>=1.0.0",
-    # LLM / Embedding
-    "openai>=1.50.0",
+    # LLM (Gemini)
+    "google-genai>=1.0.0",       # Gemini API 클라이언트 (.env 의 API_KEY / models/gemini-*)
     "tenacity>=9.0.0",            # 재시도 (LLM 호출 안정화)
     # NLP / Data
     "numpy>=1.26.0",
@@ -20,6 +20,7 @@ dependencies = [
     # Korean NLP
     "konlpy>=0.6.0",
     "nltk>=3.9.0",
+    "kiwipiepy>=0.17.0",          # Kiwi 형태소 분석 + 문장 분리 (EF/EC 판정) — Mecab+kss 대체 (2026-06-22)
     # Visualization
     "matplotlib>=3.9.0",
     "plotly>=5.24.0",
@@ -28,6 +29,7 @@ dependencies = [
     "python-docx>=1.1.0",
     # Dashboard
     "streamlit>=1.40.0",
+    "requests>=2.32.0",          # 대시보드 → FastAPI 호출
     # Configs / Logs
     "pyyaml>=6.0.0",
     "loguru>=0.7.0",

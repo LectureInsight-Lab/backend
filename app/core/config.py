@@ -1,7 +1,8 @@
 """환경 설정 (Pydantic Settings).
 
-`.env` 파일에서 LLM, 임베딩, RAG, 앙상블, 서버 설정을 로드한다.
-v2: RAG + BoW 앙상블 시스템에 필요한 설정 추가.
+`.env` 파일에서 LLM, RAG, 앙상블, 서버 설정을 로드한다.
+v2: RAG(키워드 검색) + BoW 앙상블 시스템 설정.
+LLM 제공자는 Gemini (google-genai). `.env` 의 ``API_KEY`` / ``LLM_MODEL`` 사용.
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -15,15 +16,14 @@ class Settings(BaseSettings):
     app_port: int = 8000
     cors_origins: str = "http://localhost:3000,http://localhost:8501"
 
-    # ── LLM ────────────────────────────────────────────────
-    openai_api_key: str = ""
-    llm_model: str = "gpt-4o"
-    llm_temperature: float = 0.2          # Paper #6: 일관된 채점
+    # ── LLM (Gemini) ───────────────────────────────────────
+    api_key: str = ""                          # .env: API_KEY (Gemini API key)
+    llm_model: str = "models/gemini-2.5-flash"  # .env: LLM_MODEL
+    llm_temperature: float = 0.2               # Paper #6: 일관된 채점
 
-    # ── Embedding / RAG ────────────────────────────────────
-    embedding_model: str = "text-embedding-3-small"
-    rag_chunk_lines: int = 15             # Paper #1
-    rag_top_k: int = 5                    # Paper #2
+    # ── RAG (키워드 검색, 임베딩 없음) ──────────────────────
+    rag_chunk_lines: int = 15             # Paper #1: 청크 크기(행)
+    rag_top_k: int = 5                    # Paper #2: top-K 청크
 
     # ── 앙상블 (Paper #4) ───────────────────────────────────
     ensemble_llm_weight: float = 0.70
@@ -33,7 +33,6 @@ class Settings(BaseSettings):
     # ── Cache ──────────────────────────────────────────────
     llm_cache_enabled: bool = True
     llm_cache_path: str = ".cache/llm"
-    embedding_cache_path: str = "data/processed/embeddings"
 
     @property
     def cors_origin_list(self) -> list[str]:
