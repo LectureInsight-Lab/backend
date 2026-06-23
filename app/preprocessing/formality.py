@@ -58,6 +58,27 @@ def classify_formality(ending_morph: str | None, ending_tag: str | None) -> str:
     return BANMAL
 
 
+# ── 항목 3 채점 (잠정 밴드) ────────────────────────────────────
+# [이수민 - 2026-06-22] 잠정 score band 추가.
+# 근거 부재 주의: 일관성 %의 출판 컷오프 기준치는 없음. 아래는 "한 말투로 일관될수록
+#   고점"이라는 단순 원칙의 **내부 잠정 기준**(출판 근거 아님). 실측(15강의 67~72%,
+#   존댓말/반말 ~72/28 혼용)은 2~3점대에 위치 — 혼용이 적지 않다는 판단. 박하면 컷오프 하향.
+# violation_count 미반영: 현재 consistency_ratio 만으로 채점(위반 문장 수 가중 감점은 보류).
+# 적용 범위: 팀 안내(2026-06-22) — 단일 강사만 대상. 변별 보정 불요. 절대 등급 + 주차 trend 용도.
+# 컷오프/violation 반영 확정 시 docs/scoring-bands.md 갱신 + 팀 협의.
+def consistency_score(ratio: float) -> int:
+    """consistency_ratio(%) → 1~5 (잠정 밴드). 상세 근거는 위 주석/문서 참고."""
+    if ratio >= 90:
+        return 5
+    if ratio >= 80:
+        return 4
+    if ratio >= 70:
+        return 3
+    if ratio >= 60:
+        return 2
+    return 1
+
+
 def formality_profile(sentences: list[Sentence]) -> dict:
     """문장 리스트 말투 집계 + consistency_ratio / violation_count.
 
@@ -81,13 +102,16 @@ def formality_profile(sentences: list[Sentence]) -> dict:
     }
     if denom == 0:
         return {**base, "jondaetmal_ratio": 0.0, "banmal_ratio": 0.0,
-                "consistency_ratio": 0.0, "violation_count": 0, "dominant": None}
+                "consistency_ratio": 0.0, "consistency_score": consistency_score(0.0),
+                "violation_count": 0, "dominant": None}
     jond_ratio, banmal_ratio = jond / denom * 100, banmal / denom * 100
+    cratio = max(jond_ratio, banmal_ratio)
     return {
         **base,
         "jondaetmal_ratio": jond_ratio,
         "banmal_ratio": banmal_ratio,
-        "consistency_ratio": max(jond_ratio, banmal_ratio),
+        "consistency_ratio": cratio,
+        "consistency_score": consistency_score(cratio),   # 잠정 밴드
         "violation_count": denom - max(jond, banmal),
         "dominant": "jondaetmal" if jond >= banmal else "banmal",
     }

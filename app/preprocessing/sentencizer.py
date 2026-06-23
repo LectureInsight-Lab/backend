@@ -208,3 +208,25 @@ def completeness_rate(sentences: list[Sentence]) -> float:
         return 0.0
     complete = sum(1 for s in judged if s.is_complete)
     return complete / len(judged) * 100
+
+
+# ── 항목 2 채점 (잠정 밴드) ────────────────────────────────────
+# [이수민 - 2026-06-22] 잠정 score band 추가.
+# 근거 부재 주의: 한국어 구어 강의 '완결률'의 출판 컷오프 기준치는 없음. 아래 밴드는
+#   ① 실측(15강의 완결률 69~72%, 편차 ±2.0)을 '정상~양호(4)' 위치에 두고
+#   ② 구어 특성상 100% 완결은 비자연(자기수정·중단 정상)이라 천장을 낮춰 잡은
+#   **내부 잠정 기준**이다. 출판 근거 기반 아님.
+# 적용 범위: 팀 안내(2026-06-22) — 현재는 단일 강사만 대상. 강사 간 변별 보정 불요.
+#   단일 강사라 15강의 점수는 거의 일정(정상). 변별이 아니라 절대 등급 + 주차 trend 용도.
+# 컷오프 확정 시 docs/scoring-bands.md 갱신 + 팀 협의.
+def completeness_score(rate: float) -> int:
+    """completeness_rate(%) → 1~5 (잠정 밴드). 상세 근거는 위 주석/문서 참고."""
+    if rate >= 80:
+        return 5
+    if rate >= 70:
+        return 4
+    if rate >= 60:
+        return 3
+    if rate >= 50:
+        return 2
+    return 1
