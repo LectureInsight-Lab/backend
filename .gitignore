@@ -8,6 +8,9 @@ data/metadata/*
 outputs/*
 !outputs/.gitkeep
 
+# Local config (경로 설정은 로컬 전용)
+configs/paths.yaml
+
 # Secrets
 .env
 .env.local

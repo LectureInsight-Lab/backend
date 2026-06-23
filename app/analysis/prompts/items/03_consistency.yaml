@@ -1,0 +1,38 @@
+# 항목 3: 언어 일관성 (high_inference)
+# 컨텍스트 전략: full_sample
+
+id: 3
+name: 언어 일관성
+category: language
+item_type: high_inference
+context_strategy: full_sample
+
+description: |
+  존댓말/반말 등 말투를 일관되게 유지하는지, 코드스위칭(혼용)이 강의 톤을 해치는지 평가.
+
+criteria:
+  - 말투(존댓말/반말)를 일관되게 유지하는가
+  - 지나친 혼용으로 톤이 흔들리지 않는가
+  - 수강생을 대하는 호칭/어조가 일관적인가
+
+user_template: |
+  [평가 항목]
+  언어 일관성
+
+  [평가 기준]
+  - 말투(존댓말/반말)를 일관되게 유지하는가
+  - 지나친 혼용으로 톤이 흔들리지 않는가
+  - 수강생을 대하는 호칭/어조가 일관적인가
+
+  [Few-shot 예시]
+  {few_shot_examples}
+
+  [BoW 카운트]
+  - 긍정 지표 출현: {positive_count} 회
+  - 부정 지표 출현: {negative_count} 회
+  - 지배 말투 비율(전처리): {consistency_ratio} %
+
+  [강의 발췌 — RAG top-{top_k}]
+  {rag_context}
+
+  위 정보를 종합하여 시스템 프롬프트의 출력 스키마에 맞춰 JSON 으로 답하세요.

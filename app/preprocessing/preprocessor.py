@@ -17,7 +17,7 @@ STT 포맷: ``<HH:MM:SS> speaker_id: 발화 텍스트``
 [이수민 - 2026-06-15]
 build_document(with_sentences=True) 추가 — 문장화(sentencizer)·말투(formality)로
 sentences / completeness_rate(항목2) / consistency_ratio·violation_count(항목3) 채움.
-기본 False (kss+Mecab 비용 회피, 기존 경량 경로 유지). 점수화(1~5)는 스코어러 몫.
+기본 False (Kiwi 형태소 비용 회피, 기존 경량 경로 유지). 점수화(1~5)는 스코어러 몫.
 """
 from __future__ import annotations
 
@@ -168,7 +168,7 @@ def build_document(
 
     ``with_sentences=True`` 면 문장화(sentencizer)·말투(formality)까지 수행해
     sentences / completeness_rate(항목 2) / consistency_ratio·violation_count(항목 3)
-    를 채운다. kss+Mecab 비용(~2~5초/강의)이 있어 기본은 False (경량 경로 유지).
+    를 채운다. Kiwi 형태소 비용이 있어 기본은 False (경량 경로 유지).
     점수(1~5)는 산출하지 않음 — 밴드 적용은 스코어러 몫.
     """
     if intro_minutes is None or outro_minutes is None:

@@ -197,8 +197,7 @@ def test_build_document_without_sentences_is_lean():
 
 def test_build_document_with_sentences_populates():
     """with_sentences=True → sentences/completeness_rate/consistency_ratio 채워짐."""
-    pytest.importorskip("kss")
-    pytest.importorskip("mecab")
+    pytest.importorskip("kiwipiepy")
     raw = "<09:00:00> a: 오늘은 자바를 배웁니다\n<09:00:05> a: 그래서 이게 중요하고\n"
     doc = preprocessor.build_document(
         raw, lecture_date="2026-02-02", instructor_id="kim", with_sentences=True

@@ -13,8 +13,8 @@
 
 [이수민 - 2026-06-15]
 Sentence 모델 추가 — STT 라인 파편을 재구성한 '문장' 단위.
-문장화(preprocessing/sentencizer.py): 갭 기반 발화 세그먼트 분리 → kss 문장 분리
-→ Mecab EF/EC 완결성 판정. 항목 2(발화 완결성)·3(언어 일관성)의 입력 단위.
+문장화(preprocessing/sentencizer.py): 갭 기반 발화 세그먼트 분리 → Kiwi 문장 분리
+→ Kiwi EF/EC 완결성 판정. 항목 2(발화 완결성)·3(언어 일관성)의 입력 단위.
 LectureDocument 에 편입 — build_document(with_sentences=True) 시 sentences/
 completeness_rate/consistency_ratio/violation_count 채워짐. 점수화(1~5)는 스코어러 몫.
 """
@@ -54,7 +54,7 @@ class Sentence(BaseModel):
     """STT 라인 파편을 재구성한 '문장' 단위 (sentencizer 산출).
 
     STT 는 `<HH:MM:SS> id: text` 라인이라 문장이 아니다. 갭 기반 세그먼트 분리 →
-    kss 문장 분리 → Mecab EF/EC 판정으로 만든다. 항목 2·3 의 입력.
+    Kiwi 문장 분리 → Kiwi EF/EC 판정으로 만든다. 항목 2·3 의 입력.
     """
 
     text: str
@@ -67,7 +67,7 @@ class Sentence(BaseModel):
     ends_with_gap: bool = False        # 세그먼트 끝(뒤 갭 > 임계값) → 발화 끊김 후보
     ending_morph: str | None = None    # 마지막 실질 형태소 표면형
     ending_tag: str | None = None      # 마지막 실질 형태소 품사 (EF/EC/...)
-    is_complete: bool | None = None    # EF=True, EC 등=False, 미판정(Mecab off)=None
+    is_complete: bool | None = None    # EF=True, EC 등=False, 미판정(use_morph off)=None
 
 
 class LectureDocument(BaseModel):
