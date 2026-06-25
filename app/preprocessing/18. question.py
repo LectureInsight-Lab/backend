@@ -13,10 +13,10 @@ import json
 import re
 from pathlib import Path
 
-import kss
 import pandas as pd
 
 from app.analysis.schemas import Utterance
+from app.preprocessing.utils import split_sentences
 
 # ─── 탐지 패턴 ──────────────────────────────────────────────────
 
@@ -87,7 +87,7 @@ def build_qa_llm_payload(
         ]
     """
     full_text = " ".join(u.text for u in utterances if len(u.text) >= _MIN_TEXT_LEN)
-    sentences = kss.split_sentences(full_text, backend="fast")
+    sentences = split_sentences(full_text)
 
     pairs = []
     for i, sent in enumerate(sentences):
@@ -119,12 +119,11 @@ def run(df: pd.DataFrame) -> dict:
     Returns:
         {"chunk": str} — 전체 Q-A 페어를 하나의 문자열로 합친 dict.
     """
-    text_col = "text_raw" if "text_raw" in df.columns else "text"
     utterances = [
         Utterance(
             timestamp=str(row.get("timestamp", "")),
             speaker_id=str(row.get("speaker_id", "")),
-            text=str(row.get(text_col, "")),
+            text=str(row.get("text_raw", "")),
             seconds_from_start=0,
         )
         for _, row in df.iterrows()

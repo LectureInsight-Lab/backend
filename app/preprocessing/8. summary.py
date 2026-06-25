@@ -151,12 +151,11 @@ def run(df: pd.DataFrame) -> dict:
         {"chunk": str} — LLM에 넘길 요약 컨텍스트 텍스트.
     """
     outro_df = _extract_outro(df)
-    text_col = "text_raw" if "text_raw" in df.columns else "text"
     utterances = [
         Utterance(
             timestamp=str(row.get("timestamp", "")),
             speaker_id=str(row.get("speaker_id", "")),
-            text=str(row.get(text_col, "")),
+            text=str(row.get("text_raw", "")),
             seconds_from_start=0,
         )
         for _, row in outro_df.iterrows()

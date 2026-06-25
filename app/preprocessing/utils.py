@@ -14,7 +14,6 @@ from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import google.generativeai as genai
 import kss
 import pandas as pd
 from tqdm.auto import tqdm
@@ -36,6 +35,11 @@ BREAK_GAP_SEC = 600
 
 
 # ── 파싱 + KSS ───────────────────────────────────────────────────────────────
+
+def split_sentences(text: str, backend: str = "auto") -> list[str]:
+    """KSS 문장 분리 (공유 입력 기준 단일 진입점, backend="auto")."""
+    return kss.split_sentences(text, backend=backend)
+
 
 def parse_and_split(txt_path: str | Path) -> pd.DataFrame:
     """텍스트 파일을 파싱하고 KSS로 문장을 분리한 뒤 data/processed/ 에 CSV로 저장한다.
@@ -87,7 +91,7 @@ def _split_with_timestamps(group: pd.DataFrame) -> list[dict]:
         joined += t + " "
     joined = joined.rstrip()
 
-    sentences = kss.split_sentences(joined, backend="auto")
+    sentences = split_sentences(joined)
 
     results = []
     search_from = 0
@@ -264,6 +268,7 @@ async def _classify_one(
 
 
 async def _run_classification(chunks_df: pd.DataFrame, concurrency: int = 15) -> pd.DataFrame:
+    _ensure_genai()
     model = genai.GenerativeModel(
         _LLM_MODEL,
         generation_config=genai.GenerationConfig(temperature=_LLM_TEMPERATURE),
