@@ -18,12 +18,15 @@ import kss
 import pandas as pd
 from tqdm.auto import tqdm
 
+import google.generativeai as genai
+
 from app.core.config import settings
 
 genai.configure(api_key=settings.api_key)
 
 _LLM_MODEL = settings.llm_model
 _LLM_TEMPERATURE = settings.llm_temperature
+
 
 LINE_RE = re.compile(r"^<(\d{2}:\d{2}:\d{2})>\s+(\S+):\s*(.*)$")
 
@@ -268,7 +271,6 @@ async def _classify_one(
 
 
 async def _run_classification(chunks_df: pd.DataFrame, concurrency: int = 15) -> pd.DataFrame:
-    _ensure_genai()
     model = genai.GenerativeModel(
         _LLM_MODEL,
         generation_config=genai.GenerationConfig(temperature=_LLM_TEMPERATURE),
