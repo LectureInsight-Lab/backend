@@ -85,11 +85,12 @@ source .venv/bin/activate
 pip install -e .
 cp .env.example .env              # API_KEY (Gemini) 입력
 
-# API 서버
-uvicorn app.main:app --reload
+# API 서버 (포트는 .env 의 APP_PORT)
+set -a; source .env; set +a   # .env 를 셸 환경으로 export
+uvicorn app.main:app --reload --host "$APP_HOST" --port "$APP_PORT"
 
-# Streamlit 대시보드 (별도 터미널)
-streamlit run app/dashboard/app.py
+# Streamlit 대시보드 (별도 터미널) — API Base URL 기본값은 .env 에서 자동 로드
+streamlit run app/dashboard/app.py --server.port "$DASHBOARD_PORT"
 ```
 
 ## Architecture
