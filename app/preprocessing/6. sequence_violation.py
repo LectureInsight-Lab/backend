@@ -26,21 +26,20 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 
 import google.generativeai as genai
 import pandas as pd
-from dotenv import load_dotenv
 from kiwipiepy import Kiwi
 from tqdm.auto import tqdm
 
-load_dotenv()
-genai.configure(api_key=os.environ["API_KEY"])
+from app.core.config import settings
 
-_LLM_MODEL = os.environ.get("LLM_MODEL", "models/gemini-2.5-flash")
-_LLM_TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.2"))
+genai.configure(api_key=settings.api_key)
+
+_LLM_MODEL = settings.llm_model
+_LLM_TEMPERATURE = settings.llm_temperature
 KW_THRESHOLD = 0.1
 
 _kiwi = Kiwi()

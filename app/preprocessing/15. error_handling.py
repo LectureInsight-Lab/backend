@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import pandas as pd
 import re
 from collections import defaultdict
@@ -28,13 +27,13 @@ from datetime import datetime
 from pathlib import Path
 
 import google.generativeai as genai
-from dotenv import load_dotenv
 
-load_dotenv()
-genai.configure(api_key=os.environ["API_KEY"])
+from app.core.config import settings
 
-_LLM_MODEL = os.environ.get("LLM_MODEL", "models/gemini-2.5-flash")
-_LLM_TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.2"))
+genai.configure(api_key=settings.api_key)
+
+_LLM_MODEL = settings.llm_model
+_LLM_TEMPERATURE = settings.llm_temperature
 
 # ── Step 1: Regex 패턴 ──────────────────────────────────────────────────────
 

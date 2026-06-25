@@ -9,7 +9,6 @@
 
 import asyncio
 import json
-import os
 import re
 from collections import Counter
 from datetime import datetime, timedelta
@@ -17,27 +16,17 @@ from pathlib import Path
 
 import kss
 import pandas as pd
-from dotenv import load_dotenv
 from tqdm.auto import tqdm
 
-load_dotenv()
+import google.generativeai as genai
 
-_LLM_MODEL = os.environ.get("LLM_MODEL", "models/gemini-2.5-flash")
-_LLM_TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.2"))
+from app.core.config import settings
 
-# google.generativeai 는 LLM 호출 시점에 지연 import·configure 한다.
-# (KSS 문장 분리(split_sentences)만 쓰는 모듈이 genai/API_KEY 에 묶이지 않도록)
-genai = None
+genai.configure(api_key=settings.api_key)
 
+_LLM_MODEL = settings.llm_model
+_LLM_TEMPERATURE = settings.llm_temperature
 
-def _ensure_genai():
-    """google.generativeai 를 1회 import·configure 하고 모듈 핸들을 반환."""
-    global genai
-    if genai is None:
-        import google.generativeai as _genai
-        _genai.configure(api_key=os.environ["API_KEY"])
-        genai = _genai
-    return genai
 
 LINE_RE = re.compile(r"^<(\d{2}:\d{2}:\d{2})>\s+(\S+):\s*(.*)$")
 
@@ -282,7 +271,6 @@ async def _classify_one(
 
 
 async def _run_classification(chunks_df: pd.DataFrame, concurrency: int = 15) -> pd.DataFrame:
-    _ensure_genai()
     model = genai.GenerativeModel(
         _LLM_MODEL,
         generation_config=genai.GenerationConfig(temperature=_LLM_TEMPERATURE),
