@@ -11,21 +11,31 @@
 - 리포트(HTML/DOCX) 생성 및 다운로드 링크
 - confidence < 0.5 항목 강조
 
-FastAPI(app.main) 서버가 떠 있어야 한다 (기본 http://localhost:8000).
+FastAPI(app.main) 서버가 떠 있어야 한다.
+API Base URL 기본값은 ``.env`` 의 ``APP_HOST_PUBLIC`` / ``APP_PORT`` 에서 끌어온다.
 """
 from __future__ import annotations
+
+import os
 
 import pandas as pd
 import plotly.express as px
 import requests
 import streamlit as st
+from dotenv import load_dotenv
+
+# Streamlit 은 별도 프로세스라 .env 가 자동 로드되지 않음 → 명시적으로 읽는다.
+load_dotenv()
+
+# APP_HOST(0.0.0.0)은 바인드 주소라 브라우저 접속용으로 부적절 → APP_HOST_PUBLIC 사용.
+_DEFAULT_API = f"http://{os.getenv('APP_HOST_PUBLIC', 'localhost')}:{os.getenv('APP_PORT', '8000')}"
 
 st.set_page_config(page_title="LectureInsight 대시보드", layout="wide")
 st.title("📊 LectureInsight 강의 분석 대시보드")
 
 with st.sidebar:
     st.header("설정")
-    api_base = st.text_input("API Base URL", "http://localhost:8000")
+    api_base = st.text_input("API Base URL", _DEFAULT_API)
     instructor_id = st.text_input("강사 ID", "instructor_01")
     lecture_date = st.text_input("강의일 (YYYY-MM-DD)", "2026-02-02")
     source = st.radio("STT 입력 방식", ["course_id", "직접 입력"])
