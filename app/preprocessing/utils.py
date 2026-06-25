@@ -15,17 +15,29 @@ from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import google.generativeai as genai
 import kss
 import pandas as pd
 from dotenv import load_dotenv
 from tqdm.auto import tqdm
 
 load_dotenv()
-genai.configure(api_key=os.environ["API_KEY"])
 
 _LLM_MODEL = os.environ.get("LLM_MODEL", "models/gemini-2.5-flash")
 _LLM_TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.2"))
+
+# google.generativeai 는 LLM 호출 시점에 지연 import·configure 한다.
+# (KSS 문장 분리(split_sentences)만 쓰는 모듈이 genai/API_KEY 에 묶이지 않도록)
+genai = None
+
+
+def _ensure_genai():
+    """google.generativeai 를 1회 import·configure 하고 모듈 핸들을 반환."""
+    global genai
+    if genai is None:
+        import google.generativeai as _genai
+        _genai.configure(api_key=os.environ["API_KEY"])
+        genai = _genai
+    return genai
 
 LINE_RE = re.compile(r"^<(\d{2}:\d{2}:\d{2})>\s+(\S+):\s*(.*)$")
 
@@ -37,6 +49,11 @@ BREAK_GAP_SEC = 600
 
 
 # ── 파싱 + KSS ───────────────────────────────────────────────────────────────
+
+def split_sentences(text: str, backend: str = "auto") -> list[str]:
+    """KSS 문장 분리 (공유 입력 기준 단일 진입점, backend="auto")."""
+    return kss.split_sentences(text, backend=backend)
+
 
 def parse_and_split(txt_path: str | Path) -> pd.DataFrame:
     """텍스트 파일을 파싱하고 KSS로 문장을 분리한 뒤 data/processed/ 에 CSV로 저장한다.
@@ -88,7 +105,7 @@ def _split_with_timestamps(group: pd.DataFrame) -> list[dict]:
         joined += t + " "
     joined = joined.rstrip()
 
-    sentences = kss.split_sentences(joined, backend="auto")
+    sentences = split_sentences(joined)
 
     results = []
     search_from = 0
@@ -265,6 +282,7 @@ async def _classify_one(
 
 
 async def _run_classification(chunks_df: pd.DataFrame, concurrency: int = 15) -> pd.DataFrame:
+    _ensure_genai()
     model = genai.GenerativeModel(
         _LLM_MODEL,
         generation_config=genai.GenerationConfig(temperature=_LLM_TEMPERATURE),
