@@ -32,6 +32,13 @@ from pathlib import Path
 import pandas as pd
 
 from app.preprocessing import error_handling, question, sequence_violation, summary
+from app.preprocessing import (
+    item04_learning_objectives,
+    item05_review_linkage,
+    item09_concept_definition,
+    item10_example_coverage,
+    item13_example_relevance,
+)
 from app.preprocessing.utils import PROCESSED_DIR, label_from_csv, parse_and_split
 
 # ── 18개 평가 항목 레지스트리 ─────────────────────────────────────────────────
@@ -39,11 +46,16 @@ from app.preprocessing.utils import PROCESSED_DIR, label_from_csv, parse_and_spl
 #   입력 종류: "kss" | "labeled"
 #   출력 종류: "score" | "chunk"
 _ITEMS: list[tuple[str, object, str, str]] = [
-    ("question",           question,           "kss",     "chunk"),
-    ("summary",            summary,            "kss",     "chunk"),
-    ("error_handling",     error_handling,     "labeled", "score"),
-    ("sequence_violation", sequence_violation, "labeled", "score"),
-    # TODO: 나머지 14개 항목 추가
+    ("question",            question,                   "kss",     "chunk"),
+    ("summary",             summary,                    "kss",     "chunk"),
+    ("error_handling",      error_handling,             "labeled", "score"),
+    ("sequence_violation",  sequence_violation,         "labeled", "score"),
+    ("learning_objectives", item04_learning_objectives, "kss",     "chunk"),
+    ("review_linkage",      item05_review_linkage,      "kss",     "chunk"),
+    ("concept_definition",  item09_concept_definition,  "labeled", "chunk"),
+    ("example_coverage",    item10_example_coverage,    "labeled", "chunk"),
+    ("example_relevance",   item13_example_relevance,   "labeled", "chunk"),
+    # TODO: 나머지 9개 항목 추가
 ]
 
 
