@@ -51,7 +51,8 @@ def parse_and_split(txt_path: str | Path) -> pd.DataFrame:
         txt_path: 강의 텍스트 파일 경로 (파일명 형식: YYYYMMDD_lecture-id.txt)
 
     Returns:
-        columns: lecture_id, date, timestamp, speaker_id, text_raw
+        columns: lecture_id, date, timestamp, speaker_id, text_raw,
+                 sec_raw, sec_fixed, elapsed_sec, duration_sec, break_time
     """
     txt_path = Path(txt_path)
     date, *rest = txt_path.stem.split("_", 1)
@@ -74,6 +75,7 @@ def parse_and_split(txt_path: str | Path) -> pd.DataFrame:
         return pd.DataFrame(columns=["lecture_id", "date", "timestamp", "speaker_id", "text_raw"])
 
     df = pd.DataFrame(_split_with_timestamps(pd.DataFrame(rows)))
+    df = add_timeline_columns(df)
 
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     output_path = PROCESSED_DIR / f"{txt_path.stem}_kss.csv"
@@ -122,6 +124,100 @@ def _split_with_timestamps(group: pd.DataFrame) -> list[dict]:
         search_from = sent_start + len(sent)
 
     return results
+
+
+# ── 시간/쉬는시간 컬럼 (break_detection.ipynb enrich 이식) ──────────────────────
+#   담당자: 심소민
+#   timestamp(HH:MM:SS)에서 시간축 컬럼을 파생하고 쉬는 시간 경계 발화를 표시한다.
+
+# 쉬는 시간 탐지 설정 (기존 BREAK_GAP_SEC=청킹 전용과 충돌 방지 위해 별도 이름)
+BREAK_KEYWORDS = [
+    "쉬는", "쉬었", "쉬고", "쉬도록", "쉬세", "쉴", "쉬겠", "쉬자",
+    "잠깐 쉬", "잠시 쉬", "식사",
+]
+BREAK_MIN_GAP_SEC      = 600   # 10분: 이 이상 gap일 때만 break 후보
+BREAK_GAP_FALLBACK_SEC = 3600  # 1시간: 키워드 없어도 무조건 break
+BREAK_KEYWORD_WINDOW   = 2     # 경계 발화 + 직전 N개 발화 윈도우
+
+
+def ts_to_seconds(ts: str) -> int:
+    """HH:MM:SS → 절대 초."""
+    h, m, s = map(int, ts.split(":"))
+    return h * 3600 + m * 60 + s
+
+
+def fix_am_pm_timestamps(seconds_list: list[int], min_backward_jump_sec: int = 300) -> list[int]:
+    """이전 timestamp보다 min_backward_jump_sec 이상 크게 감소하면
+    오전→오후 전환으로 간주해 +12시간 보정한다. 작은 역전은 STT/정렬 오류로 간주.
+    """
+    if not seconds_list:
+        return []
+    offset = 0
+    fixed: list[int] = []
+    prev = seconds_list[0]
+    for sec in seconds_list:
+        if sec < prev and (prev - sec) >= min_backward_jump_sec:
+            offset += 12 * 3600
+        fixed.append(sec + offset)
+        prev = sec
+    return fixed
+
+
+def has_break_keyword(texts: list[str]) -> bool:
+    return any(kw in t for t in texts for kw in BREAK_KEYWORDS)
+
+
+def detect_breaks(g: pd.DataFrame) -> pd.Series:
+    """그룹(강의 1일치) 내에서 각 행이 break 경계 발화인지 0/1로 반환한다."""
+    result = pd.Series(0, index=g.index)
+    for idx, row in g.iterrows():
+        if row["duration_sec"] < BREAK_MIN_GAP_SEC:
+            continue
+        if row["duration_sec"] >= BREAK_GAP_FALLBACK_SEC:
+            result[idx] = 1
+            continue
+        window_start = max(g.index[0], idx - BREAK_KEYWORD_WINDOW)
+        window_texts = g.loc[window_start:idx, "text_raw"].tolist()
+        if has_break_keyword(window_texts):
+            result[idx] = 1
+    return result
+
+
+def add_timeline_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """sec_raw / sec_fixed / elapsed_sec / duration_sec / break_time 컬럼을 추가한다.
+
+    lecture_id + date 기준 그룹 내에서 계산하므로 단일·다중 강의 모두 동작한다.
+    """
+    if df.empty or "timestamp" not in df.columns:
+        return df
+
+    df = df.copy()
+    groups = ["lecture_id", "date"]
+
+    # 1) sec_raw: timestamp → 절대 초
+    df["sec_raw"] = df["timestamp"].apply(ts_to_seconds)
+
+    # 2) sec_fixed: 그룹 내 오전→오후 역전 보정 (transform → 길이 보존, 컬럼 모호성 없음)
+    df["sec_fixed"] = (
+        df.groupby(groups, group_keys=False)["sec_raw"]
+          .transform(lambda s: fix_am_pm_timestamps(s.tolist()))
+    )
+
+    # 3) elapsed_sec: 강의 시작(sec_fixed 최솟값) 기준 경과 초
+    df["elapsed_sec"] = (
+        df.groupby(groups)["sec_fixed"].transform(lambda s: s - s.min())
+    ).astype(int)
+
+    # 4) duration_sec: 다음 발화까지 시간 차이, 마지막 행 = 0
+    df["duration_sec"] = (
+        df.groupby(groups)["elapsed_sec"].transform(lambda s: s.diff().shift(-1).fillna(0))
+    ).astype(int)
+
+    # 5) break_time: 쉬는 시간 경계 발화 여부 (그룹별 Series를 index 정렬로 결합)
+    break_parts = [detect_breaks(g) for _, g in df.groupby(groups, sort=False)]
+    df["break_time"] = pd.concat(break_parts).reindex(df.index).astype(int)
+
+    return df
 
 
 # ── Step 1: Regex 라벨 탐지 ──────────────────────────────────────────────────
