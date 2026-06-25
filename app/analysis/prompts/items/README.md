@@ -18,12 +18,9 @@
 ## 공통 구조
 
 ```yaml
-id: <int>
-name: <str>
+id: <int>, 문항 번호
+name: <str>, 문항 이름
 category: structure | concept | practice | language | interaction
-item_type: discrete | high_inference
-context_strategy: intro | middle | outro | full_sample | keyword
-
 description: |
   항목이 무엇을 평가하는지 한 단락 설명.
 
