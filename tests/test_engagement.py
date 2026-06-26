@@ -15,7 +15,7 @@ tests/test_engagement.py — 항목 17 참여 유도 회귀 테스트
 from __future__ import annotations
 
 from app.analysis.schemas import Utterance
-from app.preprocessing import engagement as eng
+from app.preprocessing import item17_engagement as eng
 
 
 def _u(sec: int, text: str) -> Utterance:

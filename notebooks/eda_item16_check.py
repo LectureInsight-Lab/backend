@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from app.core.paths import load_paths, read_stt
-from app.preprocessing import comprehension_check as cc
+from app.preprocessing import item16_comprehension_check as cc
 from app.preprocessing import preprocessor
 
 plt.rcParams["font.family"] = "AppleGothic"

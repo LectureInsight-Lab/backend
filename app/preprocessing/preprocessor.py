@@ -28,7 +28,7 @@ import yaml
 
 from app.analysis.schemas import LectureDocument, Session, Utterance
 from app.core.paths import read_stt
-from app.preprocessing import eda, formality, sentencizer
+from app.preprocessing import eda, item02_completeness, item03_consistency, sentencizer
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CHECKLIST_CONFIG = PROJECT_ROOT / "configs" / "checklist.yaml"
@@ -206,8 +206,8 @@ def build_document(
     violations = 0
     if with_sentences:
         sentences = sentencizer.build_sentences(utterances)
-        completeness = sentencizer.completeness_rate(sentences)
-        profile = formality.formality_profile(sentences)
+        completeness = item02_completeness.completeness_rate(sentences)
+        profile = item03_consistency.formality_profile(sentences)
         consistency = profile["consistency_ratio"]
         violations = profile["violation_count"]
 

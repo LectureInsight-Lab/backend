@@ -1,5 +1,5 @@
 """
-preprocessing/comprehension_check.py — 항목 16 이해 확인 질문: 탐지(regex) + check_rate/timing_ratio
+preprocessing/item16_comprehension_check.py — 항목 16 이해 확인 질문: 탐지(regex) + check_rate/timing_ratio
 
 [이수민 - 2026-06-17]
 조작적 정의(루브릭 v2.0):
@@ -33,7 +33,7 @@ import statistics
 from dataclasses import dataclass
 
 from app.analysis.schemas import Utterance
-from app.preprocessing.pace import lecture_minutes
+from app.preprocessing.item12_pace import lecture_minutes
 
 # ── 이해 확인 질문 탐지 패턴 (실데이터 15강의 관찰 기반, 고정밀) ──────────
 # 각 (이름, 정규식). 이름은 진단/분포 출력용. 모두 '학생을 향한 의문형 확인'.

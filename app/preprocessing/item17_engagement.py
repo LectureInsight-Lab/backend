@@ -1,5 +1,5 @@
 """
-preprocessing/engagement.py — 항목 17 참여 유도: 유도 발화 탐지 + 침묵 갭 + 결과 확인 피드백
+preprocessing/item17_engagement.py — 항목 17 참여 유도: 유도 발화 탐지 + 침묵 갭 + 결과 확인 피드백
 
 [이수민 - 2026-06-17]
 조작적 정의(루브릭 v2.0):
@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from statistics import fmean, median
 
 from app.analysis.schemas import Utterance
-from app.preprocessing.pace import lecture_minutes
+from app.preprocessing.item12_pace import lecture_minutes
 
 # ── 참여 유도 탐지: '학생이 지금 직접 시도'하도록 시키는 명령형 ─────────
 # 강사 본인 시범(보자/봅시다/볼게요/보도록/보겠/보면/보시면)은 세요/봐요 어미라 자동 제외.
