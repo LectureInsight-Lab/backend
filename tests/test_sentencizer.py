@@ -17,7 +17,7 @@ from __future__ import annotations
 import pytest
 
 from app.analysis.schemas import Utterance
-from app.preprocessing import sentencizer
+from app.preprocessing import item02_completeness, sentencizer
 
 # 형태소/문장 분리 백엔드(Kiwi) 없으면 전체 skip
 pytest.importorskip("kiwipiepy")
@@ -82,7 +82,7 @@ def test_completeness_rate_range():
         _utt("09:00:00", 0, "자바는 객체지향 언어입니다"),
         _utt("09:00:04", 4, "클래스를 정의하고"),
     ]
-    rate = sentencizer.completeness_rate(sentencizer.build_sentences(utts))
+    rate = item02_completeness.completeness_rate(sentencizer.build_sentences(utts))
     assert 0.0 <= rate <= 100.0
 
 

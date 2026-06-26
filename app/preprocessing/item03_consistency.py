@@ -1,5 +1,5 @@
 """
-preprocessing/formality.py — 항목 3 언어 일관성: 존댓말/반말/중립 라벨링 + consistency_ratio
+preprocessing/item03_consistency.py — 항목 3 언어 일관성: 존댓말/반말/중립 라벨링 + consistency_ratio
 
 [이수민 - 2026-06-15]
 sentencizer 가 만든 Sentence 의 '마지막 EF 형태소'를 받아 말투를 분류한다.

@@ -1,5 +1,5 @@
 """
-preprocessing/pace.py — 항목 12 발화 속도 적절성: SPM(음절/분) 헤드라인 + 어절 보조
+preprocessing/item12_pace.py — 항목 12 발화 속도 적절성: SPM(음절/분) 헤드라인 + 어절 보조
 
 [이수민 - 2026-06-15] 최초 — 어절 기준 WPM_kr.
 

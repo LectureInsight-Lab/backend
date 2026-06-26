@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 
 from app.analysis.schemas import Utterance
 from app.core.paths import read_stt
-from app.preprocessing import formality, pace, preprocessor, sentencizer
+from app.preprocessing import item02_completeness, item03_consistency as formality, item12_pace as pace, preprocessor, sentencizer
 
 plt.rcParams["font.family"] = "AppleGothic"
 plt.rcParams["axes.unicode_minus"] = False
@@ -85,7 +85,7 @@ def main() -> None:
     incomp = [s for s in sents if s.is_complete is False]
     base_inc = len(incomp) / (len(comp) + len(incomp))
     fracC = [base_inc + e for e in (0.0, 0.1, 0.2, 0.3)]
-    compC = [sentencizer.completeness_rate(_resample(incomp, comp, [], f)) for f in fracC]
+    compC = [item02_completeness.completeness_rate(_resample(incomp, comp, [], f)) for f in fracC]
 
     # ── 차트 ──────────────────────────────────────────────────
     fig, (a1, a2, a3) = plt.subplots(1, 3, figsize=(15, 4.4))

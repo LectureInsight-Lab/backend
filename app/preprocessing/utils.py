@@ -51,7 +51,8 @@ def parse_and_split(txt_path: str | Path) -> pd.DataFrame:
         txt_path: 강의 텍스트 파일 경로 (파일명 형식: YYYYMMDD_lecture-id.txt)
 
     Returns:
-        columns: lecture_id, date, timestamp, speaker_id, text_raw
+        columns: lecture_id, date, timestamp, speaker_id, text_raw,
+                 sec_raw, sec_fixed, elapsed_sec, duration_sec, break_time
     """
     txt_path = Path(txt_path)
     date, *rest = txt_path.stem.split("_", 1)
@@ -74,6 +75,7 @@ def parse_and_split(txt_path: str | Path) -> pd.DataFrame:
         return pd.DataFrame(columns=["lecture_id", "date", "timestamp", "speaker_id", "text_raw"])
 
     df = pd.DataFrame(_split_with_timestamps(pd.DataFrame(rows)))
+    df = add_timeline_columns(df)
 
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     output_path = PROCESSED_DIR / f"{txt_path.stem}_kss.csv"
@@ -122,6 +124,100 @@ def _split_with_timestamps(group: pd.DataFrame) -> list[dict]:
         search_from = sent_start + len(sent)
 
     return results
+
+
+# ── 시간/쉬는시간 컬럼 (break_detection.ipynb enrich 이식) ──────────────────────
+#   담당자: 심소민
+#   timestamp(HH:MM:SS)에서 시간축 컬럼을 파생하고 쉬는 시간 경계 발화를 표시한다.
+
+# 쉬는 시간 탐지 설정 (기존 BREAK_GAP_SEC=청킹 전용과 충돌 방지 위해 별도 이름)
+BREAK_KEYWORDS = [
+    "쉬는", "쉬었", "쉬고", "쉬도록", "쉬세", "쉴", "쉬겠", "쉬자",
+    "잠깐 쉬", "잠시 쉬", "식사",
+]
+BREAK_MIN_GAP_SEC      = 600   # 10분: 이 이상 gap일 때만 break 후보
+BREAK_GAP_FALLBACK_SEC = 3600  # 1시간: 키워드 없어도 무조건 break
+BREAK_KEYWORD_WINDOW   = 2     # 경계 발화 + 직전 N개 발화 윈도우
+
+
+def ts_to_seconds(ts: str) -> int:
+    """HH:MM:SS → 절대 초."""
+    h, m, s = map(int, ts.split(":"))
+    return h * 3600 + m * 60 + s
+
+
+def fix_am_pm_timestamps(seconds_list: list[int], min_backward_jump_sec: int = 300) -> list[int]:
+    """이전 timestamp보다 min_backward_jump_sec 이상 크게 감소하면
+    오전→오후 전환으로 간주해 +12시간 보정한다. 작은 역전은 STT/정렬 오류로 간주.
+    """
+    if not seconds_list:
+        return []
+    offset = 0
+    fixed: list[int] = []
+    prev = seconds_list[0]
+    for sec in seconds_list:
+        if sec < prev and (prev - sec) >= min_backward_jump_sec:
+            offset += 12 * 3600
+        fixed.append(sec + offset)
+        prev = sec
+    return fixed
+
+
+def has_break_keyword(texts: list[str]) -> bool:
+    return any(kw in t for t in texts for kw in BREAK_KEYWORDS)
+
+
+def detect_breaks(g: pd.DataFrame) -> pd.Series:
+    """그룹(강의 1일치) 내에서 각 행이 break 경계 발화인지 0/1로 반환한다."""
+    result = pd.Series(0, index=g.index)
+    for idx, row in g.iterrows():
+        if row["duration_sec"] < BREAK_MIN_GAP_SEC:
+            continue
+        if row["duration_sec"] >= BREAK_GAP_FALLBACK_SEC:
+            result[idx] = 1
+            continue
+        window_start = max(g.index[0], idx - BREAK_KEYWORD_WINDOW)
+        window_texts = g.loc[window_start:idx, "text_raw"].tolist()
+        if has_break_keyword(window_texts):
+            result[idx] = 1
+    return result
+
+
+def add_timeline_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """sec_raw / sec_fixed / elapsed_sec / duration_sec / break_time 컬럼을 추가한다.
+
+    lecture_id + date 기준 그룹 내에서 계산하므로 단일·다중 강의 모두 동작한다.
+    """
+    if df.empty or "timestamp" not in df.columns:
+        return df
+
+    df = df.copy()
+    groups = ["lecture_id", "date"]
+
+    # 1) sec_raw: timestamp → 절대 초
+    df["sec_raw"] = df["timestamp"].apply(ts_to_seconds)
+
+    # 2) sec_fixed: 그룹 내 오전→오후 역전 보정 (transform → 길이 보존, 컬럼 모호성 없음)
+    df["sec_fixed"] = (
+        df.groupby(groups, group_keys=False)["sec_raw"]
+          .transform(lambda s: fix_am_pm_timestamps(s.tolist()))
+    )
+
+    # 3) elapsed_sec: 강의 시작(sec_fixed 최솟값) 기준 경과 초
+    df["elapsed_sec"] = (
+        df.groupby(groups)["sec_fixed"].transform(lambda s: s - s.min())
+    ).astype(int)
+
+    # 4) duration_sec: 다음 발화까지 시간 차이, 마지막 행 = 0
+    df["duration_sec"] = (
+        df.groupby(groups)["elapsed_sec"].transform(lambda s: s.diff().shift(-1).fillna(0))
+    ).astype(int)
+
+    # 5) break_time: 쉬는 시간 경계 발화 여부 (그룹별 Series를 index 정렬로 결합)
+    break_parts = [detect_breaks(g) for _, g in df.groupby(groups, sort=False)]
+    df["break_time"] = pd.concat(break_parts).reindex(df.index).astype(int)
+
+    return df
 
 
 # ── Step 1: Regex 라벨 탐지 ──────────────────────────────────────────────────
@@ -334,3 +430,85 @@ async def _label(df: pd.DataFrame, concurrency: int = 15) -> pd.DataFrame:
     chunks_df = _make_anchored_chunks(df)
     chunks_df = await _run_classification(chunks_df, concurrency)
     return chunks_df
+
+
+# ── 항목 모듈 공통 유틸 (세그먼트/문장ID/키워드/컨텍스트/루브릭) ──────────────────
+#   모두 pandas 기반 순수 함수. 항목 4·5(전처리)·9(분석)에서 사용.
+
+def extract_intro_segment(utterances: pd.DataFrame, window_sec: int = 1800) -> pd.DataFrame:
+    """elapsed_sec <= window_sec 인 발화만 반환한다. 기본 1800s = 30분."""
+    return utterances[utterances["elapsed_sec"] <= window_sec].copy()
+
+
+def ensure_sentence_id(utterances: pd.DataFrame) -> pd.DataFrame:
+    """sentence_id 열이 없으면 0-based 정수 인덱스로 부여한다 (고정 식별자)."""
+    df = utterances.copy()
+    if "sentence_id" not in df.columns:
+        df = df.reset_index(drop=True)
+        df["sentence_id"] = df.index
+    return df
+
+
+def detect_keywords(utterances: pd.DataFrame, keywords: list[str]) -> list[dict]:
+    """발화에서 키워드 포함 행을 탐지해 elapsed_sec 오름차순으로 반환한다.
+
+    Returns: [{"keyword", "sentence_id", "elapsed_sec", "text"}, ...]
+    """
+    hits: list[dict] = []
+    for _, row in utterances.iterrows():
+        for kw in keywords:
+            if kw in str(row["text_raw"]):
+                hits.append({
+                    "keyword": kw,
+                    "sentence_id": int(row["sentence_id"]),
+                    "elapsed_sec": float(row["elapsed_sec"]),
+                    "text": str(row["text_raw"]),
+                })
+                break  # 한 발화에서 첫 매칭 키워드만 기록
+    return sorted(hits, key=lambda x: x["elapsed_sec"])
+
+
+def extract_context_window(
+    sentences: pd.DataFrame,
+    center_sentence_id: int,
+    n_sentences: int = 10,
+) -> list[dict]:
+    """center_sentence_id 기준 앞뒤 n_sentences 행을 반환한다 (elapsed_sec 오름차순).
+
+    Returns: [{"sentence_id", "elapsed_sec", "text"}, ...]
+    """
+    center_pos = sentences.index[sentences["sentence_id"] == center_sentence_id]
+    if len(center_pos) == 0:
+        return []
+
+    pos = int(center_pos[0])
+    start = max(0, pos - n_sentences)
+    end = min(len(sentences), pos + n_sentences + 1)
+    window = sentences.iloc[start:end]
+
+    return [
+        {
+            "sentence_id": int(r["sentence_id"]),
+            "elapsed_sec": float(r["elapsed_sec"]),
+            "text": str(r["text_raw"]),
+        }
+        for _, r in window.iterrows()
+    ]
+
+
+def format_sentences_as_text(sentences: list[dict]) -> str:
+    """sentence dict 목록을 '[elapsed_sec]s text' 형태 문자열로 결합한다."""
+    lines = [f"[{s['elapsed_sec']:.0f}s] {s['text']}" for s in sentences]
+    return "\n".join(lines)
+
+
+def apply_score_rubric(raw_score: float, thresholds: list[tuple[float, int]]) -> int:
+    """raw_score를 1-5 final_score로 변환한다.
+
+    thresholds: [(min_value, final_score), ...] 내림차순 정렬 후 첫 매칭 반환.
+        예: [(80, 5), (60, 4), (40, 3), (20, 2), (0, 1)]
+    """
+    for min_val, score in sorted(thresholds, key=lambda x: -x[0]):
+        if raw_score >= min_val:
+            return score
+    return 1

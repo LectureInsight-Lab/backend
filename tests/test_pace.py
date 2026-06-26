@@ -17,7 +17,7 @@ from __future__ import annotations
 import pytest
 
 from app.analysis.schemas import Utterance
-from app.preprocessing import pace
+from app.preprocessing import item12_pace as pace
 
 
 def _u(sec: int, text: str) -> Utterance:

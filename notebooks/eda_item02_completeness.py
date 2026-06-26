@@ -33,7 +33,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from app.core.paths import load_paths, read_stt
-from app.preprocessing import preprocessor, sentencizer
+from app.preprocessing import item02_completeness, preprocessor, sentencizer
 
 # 한글 폰트 (macOS 기본)
 plt.rcParams["font.family"] = "AppleGothic"
@@ -60,7 +60,7 @@ def sweep_completeness(date: str, course: str) -> list[float]:
     """단일 파일의 갭 임계값별 완결률 (plateau 확인용)."""
     utts = preprocessor.parse(read_stt(date, course))
     return [
-        sentencizer.completeness_rate(
+        item02_completeness.completeness_rate(
             sentencizer.build_sentences(utts, gap_threshold_seconds=t)
         )
         for t in SWEEP_THRESHOLDS
@@ -73,7 +73,7 @@ def per_file_completeness(threshold: int) -> dict[str, float]:
     for date, course in _iter_files():
         utts = preprocessor.parse(read_stt(date, course))
         sents = sentencizer.build_sentences(utts, gap_threshold_seconds=threshold)
-        out[date] = sentencizer.completeness_rate(sents)
+        out[date] = item02_completeness.completeness_rate(sents)
     return out
 
 
