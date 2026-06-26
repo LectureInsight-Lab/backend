@@ -13,7 +13,7 @@ tests/test_comprehension_check.py — 항목 16 이해 확인 질문 회귀 테�
 from __future__ import annotations
 
 from app.analysis.schemas import Utterance
-from app.preprocessing import comprehension_check as cc
+from app.preprocessing import item16_comprehension_check as cc
 
 
 def _u(sec: int, text: str) -> Utterance:
