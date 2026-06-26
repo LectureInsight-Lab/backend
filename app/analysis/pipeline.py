@@ -32,18 +32,32 @@ from pathlib import Path
 import pandas as pd
 
 from app.preprocessing import error_handling, question, sequence_violation, summary
+from app.analysis import (
+    item04_learning_objectives,
+    item05_review_linkage,
+    item09_concept_definition,
+    item10_example_coverage,
+    item13_example_relevance,
+)
 from app.preprocessing.utils import PROCESSED_DIR, label_from_csv, parse_and_split
 
 # ── 18개 평가 항목 레지스트리 ─────────────────────────────────────────────────
 # (결과 키, 모듈, 입력 종류, 출력 종류)
 #   입력 종류: "kss" | "labeled"
 #   출력 종류: "score" | "chunk"
+#   항목 4·5·9·10·13: app.analysis.itemNN_* 모듈이 내부에서 preprocessing chunk emitter를
+#   호출해 LLM 채점까지 수행 → "score" 타입.
 _ITEMS: list[tuple[str, object, str, str]] = [
-    ("question",           question,           "kss",     "chunk"),
-    ("summary",            summary,            "kss",     "chunk"),
-    ("error_handling",     error_handling,     "labeled", "score"),
-    ("sequence_violation", sequence_violation, "labeled", "score"),
-    # TODO: 나머지 14개 항목 추가
+    ("question",            question,                   "kss",     "chunk"),
+    ("summary",             summary,                    "kss",     "chunk"),
+    ("error_handling",      error_handling,             "labeled", "score"),
+    ("sequence_violation",  sequence_violation,         "labeled", "score"),
+    ("learning_objectives", item04_learning_objectives, "kss",     "score"),
+    ("review_linkage",      item05_review_linkage,      "kss",     "score"),
+    ("concept_definition",  item09_concept_definition,  "labeled", "score"),
+    ("example_coverage",    item10_example_coverage,    "labeled", "score"),
+    ("example_relevance",   item13_example_relevance,   "labeled", "score"),
+    # TODO: 나머지 9개 항목 추가
 ]
 
 
