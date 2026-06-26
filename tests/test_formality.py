@@ -15,7 +15,7 @@ tests/test_formality.py — 항목 3 말투 분류(formality) 회귀 테스트
 from __future__ import annotations
 
 from app.analysis.schemas import Sentence
-from app.preprocessing.formality import (
+from app.preprocessing.item03_consistency import (
     BANMAL, FORMAL, INFORMAL_POLITE, NEUTRAL,
     classify_formality, formality_profile,
 )

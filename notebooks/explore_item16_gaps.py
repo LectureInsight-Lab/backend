@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 
 from app.core.paths import load_paths, read_stt
-from app.preprocessing import comprehension_check as cc
+from app.preprocessing import item16_comprehension_check as cc
 from app.preprocessing import preprocessor
 
 # 갭 상한(이보다 크면 세션 경계/휴식으로 보고 분석서 제외)

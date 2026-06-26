@@ -30,7 +30,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from app.core.paths import load_paths, read_stt
-from app.preprocessing import pace, preprocessor
+from app.preprocessing import item12_pace as pace, preprocessor
 
 plt.rcParams["font.family"] = "AppleGothic"
 plt.rcParams["axes.unicode_minus"] = False
