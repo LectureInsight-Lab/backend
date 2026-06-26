@@ -18,7 +18,7 @@ import asyncio
 import pandas as pd
 
 from app.analysis import rubric_llm
-from app.preprocessing.eda_utils import apply_score_rubric
+from app.preprocessing.utils import apply_score_rubric
 from app.preprocessing.item09_concept_definition import run as build_chunks
 
 MODULE_NAME = "concept_definition"

@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from app.preprocessing.eda_utils import (
+from app.preprocessing.utils import (
     detect_keywords,
     ensure_sentence_id,
     extract_context_window,

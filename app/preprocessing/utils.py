@@ -430,3 +430,85 @@ async def _label(df: pd.DataFrame, concurrency: int = 15) -> pd.DataFrame:
     chunks_df = _make_anchored_chunks(df)
     chunks_df = await _run_classification(chunks_df, concurrency)
     return chunks_df
+
+
+# ── 항목 모듈 공통 유틸 (세그먼트/문장ID/키워드/컨텍스트/루브릭) ──────────────────
+#   모두 pandas 기반 순수 함수. 항목 4·5(전처리)·9(분석)에서 사용.
+
+def extract_intro_segment(utterances: pd.DataFrame, window_sec: int = 1800) -> pd.DataFrame:
+    """elapsed_sec <= window_sec 인 발화만 반환한다. 기본 1800s = 30분."""
+    return utterances[utterances["elapsed_sec"] <= window_sec].copy()
+
+
+def ensure_sentence_id(utterances: pd.DataFrame) -> pd.DataFrame:
+    """sentence_id 열이 없으면 0-based 정수 인덱스로 부여한다 (고정 식별자)."""
+    df = utterances.copy()
+    if "sentence_id" not in df.columns:
+        df = df.reset_index(drop=True)
+        df["sentence_id"] = df.index
+    return df
+
+
+def detect_keywords(utterances: pd.DataFrame, keywords: list[str]) -> list[dict]:
+    """발화에서 키워드 포함 행을 탐지해 elapsed_sec 오름차순으로 반환한다.
+
+    Returns: [{"keyword", "sentence_id", "elapsed_sec", "text"}, ...]
+    """
+    hits: list[dict] = []
+    for _, row in utterances.iterrows():
+        for kw in keywords:
+            if kw in str(row["text_raw"]):
+                hits.append({
+                    "keyword": kw,
+                    "sentence_id": int(row["sentence_id"]),
+                    "elapsed_sec": float(row["elapsed_sec"]),
+                    "text": str(row["text_raw"]),
+                })
+                break  # 한 발화에서 첫 매칭 키워드만 기록
+    return sorted(hits, key=lambda x: x["elapsed_sec"])
+
+
+def extract_context_window(
+    sentences: pd.DataFrame,
+    center_sentence_id: int,
+    n_sentences: int = 10,
+) -> list[dict]:
+    """center_sentence_id 기준 앞뒤 n_sentences 행을 반환한다 (elapsed_sec 오름차순).
+
+    Returns: [{"sentence_id", "elapsed_sec", "text"}, ...]
+    """
+    center_pos = sentences.index[sentences["sentence_id"] == center_sentence_id]
+    if len(center_pos) == 0:
+        return []
+
+    pos = int(center_pos[0])
+    start = max(0, pos - n_sentences)
+    end = min(len(sentences), pos + n_sentences + 1)
+    window = sentences.iloc[start:end]
+
+    return [
+        {
+            "sentence_id": int(r["sentence_id"]),
+            "elapsed_sec": float(r["elapsed_sec"]),
+            "text": str(r["text_raw"]),
+        }
+        for _, r in window.iterrows()
+    ]
+
+
+def format_sentences_as_text(sentences: list[dict]) -> str:
+    """sentence dict 목록을 '[elapsed_sec]s text' 형태 문자열로 결합한다."""
+    lines = [f"[{s['elapsed_sec']:.0f}s] {s['text']}" for s in sentences]
+    return "\n".join(lines)
+
+
+def apply_score_rubric(raw_score: float, thresholds: list[tuple[float, int]]) -> int:
+    """raw_score를 1-5 final_score로 변환한다.
+
+    thresholds: [(min_value, final_score), ...] 내림차순 정렬 후 첫 매칭 반환.
+        예: [(80, 5), (60, 4), (40, 3), (20, 2), (0, 1)]
+    """
+    for min_val, score in sorted(thresholds, key=lambda x: -x[0]):
+        if raw_score >= min_val:
+            return score
+    return 1

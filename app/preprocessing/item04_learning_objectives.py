@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from app.preprocessing.eda_utils import (
+from app.preprocessing.utils import (
     ensure_sentence_id,
     extract_intro_segment,
     format_sentences_as_text,
