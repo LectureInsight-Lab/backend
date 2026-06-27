@@ -2,9 +2,12 @@
 data/raw/*
 data/processed/*
 data/metadata/*
+data/gold/*
+data/gold/_claude_ref/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/metadata/.gitkeep
+!data/gold/.gitkeep
 outputs/*
 !outputs/.gitkeep
 

@@ -1,29 +1,24 @@
 # LectureInsight Backend (v2)
 
-강사의 STT 강의 스크립트를 **RAG + BoW 앙상블** 로 분석하여
-**18개 체크리스트 항목별 평가 + 개선 제언 + 시계열 트렌드 리포트**를 자동 생성하는 분석 엔진.
+강사의 STT 강의 스크립트를 분석해 **18개 체크리스트 항목별 평가 + 시계열 트렌드 리포트**를 자동 생성하는 분석 엔진.
 
-> v2 변경 요약 — 단순 LLM 채점(5항목) → 다신호 앙상블(18항목) 으로 전면 개편
->
-> | 영역 | v1 | v2 |
-> |---|---|---|
-> | 평가 항목 | 5개 (균등 구조) | **18개** (5 카테고리 + discrete/high_inference 구분) |
-> | 컨텍스트 | 청크 분할 후 일괄 LLM | **RAG 검색** (의미 기반 top-K 청크) |
-> | 신호원 | LLM 단독 | **LLM + BoW + Few-shot** 앙상블 |
-> | 신뢰도 | 점수만 | **confidence 필드 + 인간 검토 표시** |
-> | 출력 | PDF/DOCX | **HTML(차트 인라인) + DOCX + Streamlit 대시보드** |
-> | 시계열 | placeholder | **선형 회귀 트렌드 판별** |
+## 한눈에 보는 구조
+
+- **항목별 모듈 패턴**: 18개 평가 항목을 `app/preprocessing/itemNN_*.py`(데이터 가공·정량 채점)와 `app/analysis/itemNN_*.py`(LLM 채점)로 쪼개 모듈화. 새 항목 추가 = `pipeline._ITEMS` 한 줄.
+- **공유 입력 2종**: `kss`(KSS 문장 분리 결과) · `labeled`(개념/예시/실습으로 라벨링된 청크). 강의 1편당 1회만 생성하고 모든 항목이 재사용.
+- **출력 2종**: `score`(최종 점수 1~5) · `chunk`(LLM 입력용 청크만, 채점은 위임).
+- **비동기 18병렬**: `asyncio.gather` 로 항목 모듈을 동시 실행. Gemini 호출은 항목 내부에서 `Semaphore(concurrency)` 로 동시성 제어.
 
 ## Stack
 
-- **Framework**: FastAPI (API) + Streamlit (대시보드)
-- **LLM**: Google Gemini (`models/gemini-2.5-flash`, `temperature=0.2`)
-- **RAG**: 키워드 검색 (임베딩 없이 청크 토큰 오버랩 top-K)
-- **NLP**: Kiwi, scikit-learn (선형 회귀)
+- **Framework**: FastAPI(API) + Streamlit(대시보드)
+- **LLM**: Google Gemini (`gemini-2.5-flash`, `temperature=0.2`, `response_mime_type="application/json"`)
+- **NLP**: Kiwi(kiwipiepy, 문장 분리·형태소·EF/EC 완결성), KSS(공유 입력의 문장 분리), 정규식
 - **Data**: pandas, numpy, pydantic v2
-- **Async**: asyncio + tenacity (18항목 병렬, 자동 재시도)
+- **Async**: asyncio + Semaphore (Gemini 동시성 제어)
 - **Visualization**: matplotlib, plotly
-- **Report**: Jinja2 (HTML), python-docx (DOCX)
+- **Report**: Jinja2(HTML), python-docx(DOCX)
+- **영속화**: 파일 시스템 JSON (`data/processed/scorecards/`) — DB 미도입
 - **Logs**: loguru
 
 ## Project Layout
@@ -31,48 +26,81 @@
 ```
 backend/
 ├── app/
-│   ├── api/routes/              # FastAPI 엔드포인트
+│   ├── api/routes/
 │   │   ├── analysis.py          # POST /lecture, /batch, GET /instructor/{id}
-│   │   ├── report.py            # POST /generate, GET /download/{id}
+│   │   ├── report.py            # POST /generate, GET /download/{file_id}
 │   │   └── health.py
 │   ├── core/
-│   │   ├── config.py            # Pydantic Settings (.env 로드)
-│   │   └── checklist.py         # ChecklistItem / ItemType / ContextStrategy
+│   │   ├── config.py            # Pydantic Settings (.env)
+│   │   ├── checklist.py         # ChecklistItem 정의 (configs/checklist.yaml 로더)
+│   │   ├── paths.py             # configs/paths.yaml 로 외부 STT 경로 해석
+│   │   └── store.py             # InstructorScorecard 파일 영속화 (DB 도입 전)
 │   ├── preprocessing/
-│   │   ├── preprocessor.py      # STT 파싱 + intro/middle/outro 분리
-│   │   └── eda.py               # filler_word_ratio, avg_line_gap (BoW 입력)
+│   │   ├── utils.py             # ★ 공통 인프라: parse_and_split / label_from_csv,
+│   │   │                        #   시간축 보정, 키워드/컨텍스트 윈도우, 루브릭 변환
+│   │   ├── sentencizer.py       # Kiwi 문장화 + EF/EC 완결성 (항목 2,3 의존)
+│   │   ├── noun_extractor.py    # 명사 추출 (키워드 파이프라인 입력)
+│   │   ├── keyword_pipeline.py  # 키워드 집계 파이프라인
+│   │   ├── preprocessor.py      # (보조) STT 파싱
+│   │   ├── eda.py               # 보조 통계
+│   │   ├── question.py          # 학생 Q-A 페어 추출 → chunk 출력
+│   │   ├── summary.py           # 마무리 요약 chunk 출력
+│   │   ├── error_handling.py    # 오류 대응 — 직접 score
+│   │   ├── sequence_violation.py# 설명 순서 위반 — 직접 score
+│   │   ├── item02_completeness.py
+│   │   ├── item03_consistency.py
+│   │   ├── item04_learning_objectives.py
+│   │   ├── item05_review_linkage.py
+│   │   ├── item09_concept_definition.py
+│   │   ├── item10_example_coverage.py
+│   │   ├── item12_pace.py
+│   │   ├── item13_example_relevance.py
+│   │   ├── item16_comprehension_check.py
+│   │   └── item17_engagement.py
 │   ├── analysis/
-│   │   ├── schemas.py           # 파이프라인 단계별 Pydantic 모델
-│   │   ├── behavior_tagger.py   # 2-A: BoW 행동 태깅 (Paper #3)
-│   │   ├── embedder.py          # 2-B: 임베딩 + RAG 검색 (Papers #1, #5)
-│   │   ├── templates.py         # 프롬프트 조립 (system + item + few-shot + RAG + BoW)
-│   │   ├── analyzer.py          # 3: LLM 비동기 분석 (Paper #2)
-│   │   ├── ensemble.py          # 4: discrete vs high_inference 결합 (Paper #4)
-│   │   ├── scorer.py            # 5: 카테고리 가중 평균 + 시계열 회귀
-│   │   └── prompts/
-│   │       ├── system.yaml      # 공통 루브릭
-│   │       └── items/           # 18개 항목별 프롬프트 (id_name.yaml)
+│   │   ├── pipeline.py          # ★ 18 항목 비동기 오케스트레이터 (_ITEMS 레지스트리)
+│   │   ├── rubric_llm.py        # ★ Gemini 호출 + 항목 YAML 프롬프트 로더
+│   │   ├── schemas.py           # Utterance / Sentence / InstructorScorecard 등
+│   │   ├── scorer.py            # 카테고리 가중 평균 + 트렌드 + 주차 집계
+│   │   ├── item04_learning_objectives.py
+│   │   ├── item05_review_linkage.py
+│   │   ├── item09_concept_definition.py
+│   │   ├── item10_example_coverage.py
+│   │   ├── item13_example_relevance.py
+│   │   ├── 07_emphasis.py       # ⚠ item 접두사 누락 (네이밍 정리 대상)
+│   │   ├── 11_prerequisite.py   # ⚠
+│   │   ├── 14_practice_link.py  # ⚠
+│   │   ├── emphasis_checker.py
+│   │   ├── prompts/
+│   │   │   └── items/           # itemNN_*.yaml (항목별 system + user_template)
+│   │   └── (analyzer.py / embedder.py / behavior_tagger.py / ensemble.py
+│   │        / templates.py — v2 초안의 stub, 미사용)
 │   ├── report/
-│   │   ├── report_generator.py  # 6: 통합 진입점
+│   │   ├── report_generator.py  # OUTPUT_ROOT, generate(scorecard, formats)
 │   │   ├── charts.py            # 레이더 / 추이 차트
-│   │   ├── html.py              # Jinja2 HTML
+│   │   ├── html.py              # Jinja2
 │   │   └── docx.py              # python-docx
 │   ├── dashboard/
-│   │   └── app.py               # 7: Streamlit 대시보드
-│   ├── models/                  # 공용 데이터 모델 placeholder
-│   ├── utils/
-│   └── main.py                  # FastAPI 진입점
+│   │   └── app.py               # Streamlit (분석 실행 / 이력 / 리포트 다운로드)
+│   ├── main.py                  # FastAPI 부트스트랩
+│   ├── models/                  # placeholder
+│   └── utils/                   # placeholder
 ├── configs/
-│   ├── checklist.yaml           # 18개 항목 메타 + 카테고리 가중치 + 구간 분리
-│   ├── bow_indicators.yaml      # 항목별 긍정/부정 키워드 사전
-│   └── few_shot_examples.yaml   # 항목별 good/bad 예시 (Paper #2)
+│   ├── checklist.yaml           # 18 항목 메타 + 카테고리 가중치
+│   ├── kiwi_user_dict.yaml      # Kiwi 사용자 사전
+│   ├── paths.example.yaml       # paths.yaml 템플릿
+│   ├── paths.yaml               # ★ 외부 STT 경로 (gitignore 권장)
+│   ├── bow_indicators.yaml      # (초안 잔존, 사용 안 함)
+│   └── few_shot_examples.yaml   # (초안 잔존, 사용 안 함)
 ├── data/                        # 원본/처리 데이터 (gitignore)
 │   ├── raw/                     # STT 원본 .txt
-│   ├── processed/embeddings/    # 임베딩 캐시 (date별 .json)
-│   └── metadata/                # 메타데이터 CSV
+│   └── processed/
+│       ├── *_kss.csv            # parse_and_split 결과 (문장 분리)
+│       ├── *_labeled.json       # label_from_csv 결과 (개념/예시/실습 청크)
+│       └── scorecards/          # store.py 가 저장한 InstructorScorecard
 ├── outputs/                     # 생성 리포트 (gitignore)
-├── notebooks/                   # EDA, 프롬프트 실험
-├── tests/
+├── notebooks/                   # 항목별 EDA, 라벨 검토 등
+├── tests/                       # 항목별 단위 테스트
 ├── pyproject.toml
 └── .env.example
 ```
@@ -83,234 +111,283 @@ backend/
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
-cp .env.example .env              # API_KEY (Gemini) 입력
+cp .env.example .env                  # API_KEY (Gemini) 입력
+cp configs/paths.example.yaml configs/paths.yaml   # 외부 STT 경로 지정
 
-# API 서버 (포트는 .env 의 APP_PORT)
-set -a; source .env; set +a   # .env 를 셸 환경으로 export
+# API 서버
+set -a; source .env; set +a
 uvicorn app.main:app --reload --host "$APP_HOST" --port "$APP_PORT"
 
-# Streamlit 대시보드 (별도 터미널) — API Base URL 기본값은 .env 에서 자동 로드
+# Streamlit 대시보드 (별도 터미널)
 streamlit run app/dashboard/app.py --server.port "$DASHBOARD_PORT"
+
+# 또는: 파이프라인 CLI 단독 실행 (FastAPI 없이)
+python -m app.analysis.pipeline data/raw/2026-02-02_kdt-backendj-21th.txt
 ```
 
 ## Architecture
 
-### 1) 전체 파이프라인
+### 책임 경계 — preprocessing vs analysis
+
+| 디렉토리 | 책임 |
+|---|---|
+| **preprocessing/** | ① STT 파싱·문장 분리·시간축 정리 등 **공통 입력 인프라**. ② 항목별 **데이터 가공**: LLM 채점이 필요하면 `chunk` 만 만들고 analysis에 위임, 정량 계산만으로 끝나는 항목은 **직접 score 산출**. |
+| **analysis/** | ① **LLM 호출 추상화**(`rubric_llm.py`)와 항목 프롬프트 보관. ② 항목별 **LLM 채점 진입점**: 같은 이름의 preprocessing 모듈을 호출해 chunk를 받고 Gemini 채점. ③ **오케스트레이션**(`pipeline.py`)과 **점수 집계**(`scorer.py`). |
+
+> 같은 항목이 두 디렉토리에 동시에 존재할 수 있습니다 — 예: `preprocessing/item04_learning_objectives.py` 가 도입부 30분 청크 생성, `analysis/item04_learning_objectives.py` 가 Gemini 호출·채점.
+
+### 항목 모듈의 4가지 형태
+
+`pipeline._ITEMS` 는 각 항목을 `(결과 키, 모듈, 입력 종류, 출력 종류)` 로 등록합니다.
+
+|  | 입력 = `kss` (문장 분리만) | 입력 = `labeled` (개념/예시/실습 라벨) |
+|---|---|---|
+| 출력 = `score` (최종 점수) | item04, item05 (preprocessing 청크 → analysis LLM 채점) | item09, item10, item13, error_handling, sequence_violation |
+| 출력 = `chunk` (LLM 입력만) | question, summary | — |
+
+`score` 출력은 결과 dict 의 `final_score` 섹션, `chunk` 출력은 `chunk` 섹션에 모입니다.
+
+### 단일 강의 분석 흐름 (`POST /api/v1/analysis/lecture` → `pipeline.run`)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         입력 데이터                              │
-│  STT 스크립트 (.txt) + 메타데이터 (.csv) + 체크리스트 (.pdf)       │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │
-                   ┌──────▼──────┐
-                   │  1단계       │
-                   │ 전처리        │  preprocessor.py
-                   │             │  - STT 파싱 (<HH:MM:SS> id: text)
-                   │             │  - intro / middle / outro 구간 분리
-                   │             │  - 보조 통계 (eda.py)
-                   └──────┬──────┘
-                          │ LectureDocument
-              ┌───────────┼───────────┐
-              │           │           │
-       ┌──────▼─────┐     │     ┌─────▼──────┐
-       │  2-A단계    │     │     │  2-B단계    │
-       │ BoW 태깅    │     │     │ RAG 인덱싱   │
-       │            │     │     │            │
-       │behavior_   │     │     │embedder.py │  Papers #1, #5
-       │tagger.py   │     │     │ - 15행 청크 │
-       │            │     │     │ - 임베딩    │
-       │ Paper #3   │     │     │ - 캐싱      │
-       └──────┬─────┘     │     │ - 코사인검색 │
-              │           │     └─────┬──────┘
-              │BehaviorProfile        │ LectureIndex
-              └───────────┬───────────┘
-                          │
-                   ┌──────▼──────┐
-                   │  3단계       │
-                   │ LLM 분석     │  analyzer.py
-                   │             │  - RAG top-K 컨텍스트 주입
-                   │             │  - BoW 카운트 프롬프트 주입
-                   │             │  - Few-shot 예시 포함   Paper #2
-                   │             │  - 18항목 비동기 병렬
-                   │             │  - JSON 강제 (response_format)
-                   └──────┬──────┘
-                          │ LLMItemRaw × 18
-                   ┌──────▼──────┐
-                   │  4단계       │
-                   │ 앙상블       │  ensemble.py            Paper #4
-                   │             │  - discrete: LLM 직접
-                   │             │  - high_inference:
-                   │             │      LLM 70% + BoW 30%
-                   │             │  - confidence 조정
-                   └──────┬──────┘
-                          │ ItemScore × 18
-                   ┌──────▼──────┐
-                   │  5단계       │
-                   │ 스코어링      │  scorer.py
-                   │             │  - 카테고리별 가중 평균
-                   │             │  - 종합 점수
-                   │             │  - 시계열 선형회귀(트렌드)
-                   │             │  - 주차별 집계
-                   └──────┬──────┘
-                          │ InstructorScorecard
-                   ┌──────▼──────┐
-                   │  6단계       │
-                   │ 리포트 생성    │  report_generator.py
-                   │             │  - 레이더 차트 / 추이 차트
-                   │             │  - HTML (Jinja2 + base64)
-                   │             │  - DOCX (python-docx)
-                   └──────┬──────┘
-                          │
-              ┌───────────▼───────────┐
-              │   Streamlit 대시보드   │  app/dashboard/app.py
-              │   - 분석 실행 / 결과 조회
-              │   - 트렌드 시각화
-              │   - 리포트 다운로드
-              └───────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│ STT 텍스트 (raw_text 또는 paths.yaml + course_id 로 외부 파일 로드)  │
+└────────────────────────────────────┬───────────────────────────────┘
+                                     │
+                ┌────────────────────▼────────────────────┐
+                │ utils.parse_and_split()                  │
+                │  - STT 파싱 (<HH:MM:SS> id: text)        │
+                │  - KSS 문장 분리                          │
+                │  - 시간축 보정 (sec_raw → sec_fixed →    │
+                │    elapsed_sec → duration_sec)           │
+                │  - 쉬는 시간 경계 탐지 (break_time)       │
+                │  → data/processed/<stem>_kss.csv         │
+                └────────────────────┬────────────────────┘
+                                     │ kss_df
+                ┌────────────────────▼────────────────────┐
+                │ utils.label_from_csv()                   │
+                │  - 정규식으로 개념/예시/실습 1차 탐지       │
+                │  - 앵커 창 병합                           │
+                │  - Gemini 로 청크 라벨 확정               │
+                │  → data/processed/<stem>_labeled.json    │
+                └────────────────────┬────────────────────┘
+                                     │ labeled_df
+                                     │
+   ┌─────────────────────────────────┴─────────────────────────────┐
+   │     pipeline._run_all  (asyncio.gather, 항목당 1 태스크)          │
+   │                                                                │
+   │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────┐   │
+   │  │ item04       │ │ item09       │ │ question     │ │ ...  │   │
+   │  │ (kss/score)  │ │ (labeled/    │ │ (kss/chunk)  │ │      │   │
+   │  │              │ │  score)      │ │              │ │      │   │
+   │  │ 1. preproc.  │ │ 1. preproc.  │ │ 1. preproc.  │ │      │   │
+   │  │    item04.run│ │    item09.run│ │    question. │ │      │   │
+   │  │ 2. rubric_llm│ │ 2. rubric_llm│ │    run(df)   │ │      │   │
+   │  │    → Gemini  │ │    → Gemini  │ │              │ │      │   │
+   │  │ 3. _score()  │ │ 3. _score()  │ │              │ │      │   │
+   │  └──────┬───────┘ └──────┬───────┘ └──────┬───────┘ └──────┘   │
+   └─────────┼────────────────┼────────────────┼────────────────────┘
+             │                │                │
+             ▼                ▼                ▼
+         {final_score}    {final_score}    {chunk}
+                                     │
+                ┌────────────────────▼────────────────────┐
+                │ pipeline.run 반환 dict                    │
+                │  {                                       │
+                │    "evaluated_at": ...,                  │
+                │    "source": "<filename>",               │
+                │    "final_score": { item: {...}, ... },  │
+                │    "chunk":       { item: {...}, ... },  │
+                │  }                                       │
+                └────────────────────┬────────────────────┘
+                                     │
+                ┌────────────────────▼────────────────────┐
+                │ scorer.build_scorecard / attach_trend    │
+                │  (카테고리 가중 평균 + 시계열 회귀)         │
+                └────────────────────┬────────────────────┘
+                                     │ InstructorScorecard
+                ┌────────────────────▼────────────────────┐
+                │ store.save  → JSON 영속화               │
+                │ (data/processed/scorecards/...)         │
+                └────────────────────┬────────────────────┘
+                                     │
+                                     ▼  JSON 응답 / Streamlit 렌더 / 리포트 생성
 ```
 
-### 2) 단일 강의 분석 시퀀스 (`POST /api/v1/analysis/lecture`)
+### Mermaid: API 진입점 시퀀스
 
 ```mermaid
 flowchart TD
-    A[Client: STT .txt + lecture_date + instructor_id] --> B[analysis.py: analyze_lecture]
-    B --> C[preprocessor.build_document]
-    C -->|STT 파싱 + intro/middle/outro 분리<br/>+ filler_ratio/line_gap| D[LectureDocument]
-
-    D --> E1[behavior_tagger.tag<br/>BoW 카운트 × 18]
-    D --> E2[embedder.build_index<br/>15행 청크 + 임베딩 캐싱]
-
-    E1 --> F[BehaviorProfile]
-    E2 --> G[LectureIndex]
-
-    F --> H[analyzer.analyze_lecture<br/>asyncio.gather × 18]
-    G --> H
-    D --> H
-
-    H -->|항목별 context_strategy 적용<br/>+ Few-shot + RAG top-K + BoW| I[LLM × 18<br/>Gemini, temp=0.2]
-    I -->|JSON 구조화| J[LLMItemRaw × 18]
-
-    J --> K[ensemble.ensemble_all]
-    F --> K
-    K -->|discrete: LLM 직접<br/>high_inference: 0.7×LLM + 0.3×BoW| L[ItemScore × 18]
-
-    L --> M[scorer.build_scorecard]
-    M -->|카테고리 가중 평균<br/>+ 종합 점수| N[InstructorScorecard]
-    N --> O[JSON 응답]
+    A[POST /api/v1/analysis/lecture] --> B[routes.analyze_lecture]
+    B -->|raw_text or course_id| C{paths.read_stt?}
+    C --> D[pipeline.analyze_raw_text]
+    D --> D1[utils.parse_and_split → kss_df]
+    D1 --> D2[utils.label_from_csv → labeled_df]
+    D2 --> D3[asyncio.gather × N items]
+    D3 -->|score 출력| E1[final_score 섹션]
+    D3 -->|chunk 출력| E2[chunk 섹션]
+    E1 --> F[scorer.build_scorecard]
+    F --> G[store.save 1차]
+    G --> H[scorer.attach_trend 누적 이력]
+    H --> I[store.save 재저장]
+    I --> J[InstructorScorecard 응답]
 ```
 
-### 3) 리포트 생성 시퀀스 (`POST /api/v1/report/generate`)
+### 리포트 생성 흐름 (`POST /api/v1/report/generate`)
 
 ```mermaid
 flowchart TD
-    R1[InstructorScorecard 입력] --> R2[report_generator.generate]
-    R2 --> R3[charts.radar_chart]
-    R2 --> R4[charts.trend_chart]
-    R3 --> R5[base64 PNG]
-    R4 --> R5
-    R5 --> R6{formats?}
-    R6 -->|html| R7[html.render<br/>Jinja2 + 인라인 base64]
-    R6 -->|docx| R8[docx.render<br/>python-docx + png 삽입]
-    R7 --> R9[outputs/.../*.html]
-    R8 --> R10[outputs/.../*.docx]
+    R1[scorecard_id or scorecard] --> R2{store.get?}
+    R2 --> R3[report_generator.generate]
+    R3 --> R4[charts.radar_chart / trend_chart]
+    R4 --> R5{formats?}
+    R5 -->|html| R6[html.render → Jinja2 + base64 차트]
+    R5 -->|docx| R7[docx.render → python-docx]
+    R6 --> R8[outputs/{instructor}/{date}.html]
+    R7 --> R9[outputs/{instructor}/{date}.docx]
+    R8 --> R10[GET /download/{file_id} → FileResponse]
+    R9 --> R10
 ```
 
-### 4) 데이터 흐름 요약 (Pydantic 스키마 기준)
+### 데이터 흐름 (Pydantic / dict 기준)
 
 ```
 raw_text (str)
-    ↓ preprocessor.build_document
-LectureDocument { intro_lines, middle_lines, outro_lines, filler_ratio, line_gap }
-    ↓ ┌── behavior_tagger.tag ── BehaviorProfile { items: {1..18: ItemBoW} }
-      └── embedder.build_index ── LectureIndex { chunks: [IndexedChunk × N] }
-    ↓ analyzer.analyze_lecture (asyncio × 18)
-LLMItemRaw × 18 { score, evidence, strengths, improvements, confidence, used_chunk_ids }
-    ↓ ensemble.ensemble_all
-ItemScore × 18 { final_score, llm_score, bow_score, final_confidence, needs_human_review }
-    ↓ scorer.build_scorecard (+ category_weights, + 선형회귀)
-InstructorScorecard { overall_score, category_scores, item_scores, trend_slope, trend_label }
-    ↓ report_generator.generate
-outputs/*.html + outputs/*.docx
+   ↓ utils.parse_and_split
+kss_df (DataFrame: lecture_id, date, timestamp, speaker_id, text_raw,
+                   sec_raw, sec_fixed, elapsed_sec, duration_sec, break_time)
+   ↓ utils.label_from_csv
+labeled_df (DataFrame: file, anchor_dt, anchor_label, anchor_text,
+                       n_merged, n_utterances, text,
+                       llm_label, llm_reason, llm_key_sentence)
+   ↓ pipeline._run_all (item modules)
+{ final_score: { item: {evidence, reason, final_score:1~5}, ... },
+  chunk:       { item: {chunk: str}, ... } }
+   ↓ scorer.build_scorecard + attach_trend
+InstructorScorecard {
+  instructor_id, lecture_date, overall_score,
+  category_scores, item_scores,
+  trend_slope, trend_label, trend_points
+}
+   ↓ store.save → data/processed/scorecards/{instructor}/{date}.json
+   ↓ report_generator.generate → outputs/.../*.{html,docx}
 ```
 
 ## 18개 체크리스트 항목
 
-| ID | 항목명 | 카테고리 | 유형 | 컨텍스트 전략 |
-|---|---|---|---|---|
-| 1 | 불필요한 반복 표현 | language | high_inference | full_sample |
-| 2 | 발화 완결성 | language | high_inference | full_sample |
-| 3 | 언어 일관성 | language | high_inference | full_sample |
-| 4 | 학습 목표 안내 | structure | **discrete** | intro |
-| 5 | 전날 복습 연계 | structure | **discrete** | intro |
-| 6 | 설명 순서 | structure | high_inference | full_sample |
-| 7 | 핵심 강조 | structure | high_inference | middle |
-| 8 | 마무리 요약 | structure | **discrete** | outro |
-| 9 | 개념 정의 | concept | high_inference | middle |
-| 10 | 비유/예시 활용 | concept | high_inference | middle |
-| 11 | 선행 개념 확인 | concept | high_inference | intro |
-| 12 | 발화 속도 적절성 | concept | high_inference | full_sample |
-| 13 | 예시 적절성 | practice | high_inference | middle |
-| 14 | 실습 연계 | practice | high_inference | keyword |
-| 15 | 오류 대응 | practice | high_inference | keyword |
-| 16 | 이해 확인 질문 | interaction | **discrete** | keyword |
-| 17 | 참여 유도 | interaction | **discrete** | keyword |
-| 18 | 질문 응답 충분성 | interaction | **discrete** | keyword |
+`configs/checklist.yaml` 의 메타와 실제 구현 상태를 함께 표기합니다.
 
-**discrete (6개)** — 존재 여부 판단형. LLM 단독 사용 + confidence +0.10.
-**high_inference (12개)** — 질적 판단형. `LLM 70% + BoW 30%` 앙상블, BoW 근거 부족 시 confidence × 0.85.
+| ID | 항목 | 카테고리 | 유형 | preprocessing | analysis | 채점 방식 | 비고 |
+|---|---|---|---|---|---|---|---|
+| 1 | 불필요한 반복 표현 | language | high_inference | — | — | — | 미구현 |
+| 2 | 발화 완결성 | language | high_inference | `item02_completeness` | — | 정량(EF/EC) | sentencizer 의존 |
+| 3 | 언어 일관성 | language | high_inference | `item03_consistency` | — | 정량 | |
+| 4 | 학습 목표 안내 | structure | discrete | `item04_learning_objectives` | `item04_learning_objectives` | LLM | intro 30분 chunk |
+| 5 | 전날 복습 연계 | structure | discrete | `item05_review_linkage` | `item05_review_linkage` | LLM | |
+| 6 | 설명 순서 | structure | high_inference | `sequence_violation` | — | 정량 | labeled 기반 |
+| 7 | 핵심 강조 | structure | high_inference | — | `07_emphasis` + `emphasis_checker` | LLM | ⚠ item 접두사 누락 |
+| 8 | 마무리 요약 | structure | discrete | `summary` | — | (chunk만) | 채점 모듈 미구현 |
+| 9 | 개념 정의 | concept | high_inference | `item09_concept_definition` | `item09_concept_definition` | LLM | labeled |
+| 10 | 비유/예시 활용 | concept | high_inference | `item10_example_coverage` | `item10_example_coverage` | LLM | labeled |
+| 11 | 선행 개념 확인 | concept | high_inference | — | `11_prerequisite` | LLM | ⚠ item 접두사 누락 |
+| 12 | 발화 속도 적절성 | concept | high_inference | `item12_pace` | — | 정량 | duration_sec 활용 |
+| 13 | 예시 적절성 | practice | high_inference | `item13_example_relevance` | `item13_example_relevance` | LLM | labeled |
+| 14 | 실습 연계 | practice | high_inference | — | `14_practice_link` | LLM | ⚠ item 접두사 누락 |
+| 15 | 오류 대응 | practice | high_inference | `error_handling` | — | 정량 | labeled |
+| 16 | 이해 확인 질문 | interaction | discrete | `item16_comprehension_check` | — | 정량 | 키워드 + 정량 |
+| 17 | 참여 유도 | interaction | discrete | `item17_engagement` | — | 정량 | |
+| 18 | 질문 응답 충분성 | interaction | discrete | `question`(Q-A 추출) | — | (chunk만) | 채점 모듈 미구현 |
 
-## 카테고리 가중치 (종합 점수)
+### 카테고리 가중치
 
-| 카테고리 | 가중치 | 항목 수 |
-|---|---|---|
-| 강의 도입 및 구조 (structure) | 25% | 5 |
-| 개념 설명 명확성 (concept) | 25% | 4 |
-| 예시 및 실습 연계 (practice) | 20% | 3 |
-| 언어 표현 품질 (language) | 15% | 3 |
-| 수강생 상호작용 (interaction) | 15% | 3 |
+| 카테고리 | 가중치 |
+|---|---|
+| structure | 25% |
+| concept | 25% |
+| practice | 20% |
+| language | 15% |
+| interaction | 15% |
 
-## 핵심 설계 결정 (논문 근거)
+## 새 평가 항목 추가하기
 
-| Paper | 인사이트 | v2 적용 |
-|---|---|---|
-| **#1** Göllner et al. (2025) | GPT 임베딩으로 의미 패턴 도출 → 강의 품질 분산 20% 설명 | `embedder.py` 15행 청크 임베딩 |
-| **#2** EDM (2024) | Few-shot 예시로 정확도 10–15% ↑, 컨텍스트 길이 관리 핵심 | `templates.py` good/bad 예시, `RAG_TOP_K=5` |
-| **#3** arXiv:2310.01132 | 발화 단위 BoW 행동 지표 + LLM 앙상블이 단독보다 안정적 | `behavior_tagger.py`, `ensemble.py` 7:3 |
-| **#4** arXiv:2404.02444 | discrete vs high_inference 분리 처리 필수 | `ItemType` enum, ensemble 분기 |
-| **#5** ResearchGate (2024) | RAG 주입으로 환각 감소, 강의 고유 용어 반영률 ↑ | `embedder.search()` 코사인 top-K |
-| **#6** MDPI (2024) | 프롬프트 품질 + 낮은 temperature 가 점수 정확도 결정 | `LLM_TEMPERATURE=0.2`, 명시적 루브릭 |
-| **#7** C&E AI (2025) | 분위기·공감 등 정성 항목은 텍스트만으론 한계 | `confidence < 0.5` → "인간 검토 권장" 표기 |
+1. `app/preprocessing/itemNN_<name>.py` 작성 — `run(df) -> {"chunk": str}` 또는 `run(df) -> {"final_score": int, "reason": str, "evidence": ...}`
+2. LLM 채점이 필요하면 `app/analysis/itemNN_<name>.py` 작성 — preprocessing의 `run(df)` 으로 chunk를 받고 `rubric_llm.judge()` 호출
+3. LLM 프롬프트가 필요하면 `app/analysis/prompts/items/itemNN_<name>.yaml` 추가 (`system`, `user_template`)
+4. `app/analysis/pipeline.py:_ITEMS` 에 한 줄 추가:
+   ```python
+   ("<key>", <module>, "kss"|"labeled", "score"|"chunk"),
+   ```
+5. `configs/checklist.yaml` 의 18 항목 메타와 동기화 (현재 메타와 코드 등록이 어긋날 수 있음)
 
 ## 환경 변수
 
-`.env.example` 참고. 주요 변수:
-
-```
-API_KEY=...                       # Gemini API key
-LLM_MODEL=models/gemini-2.5-flash
+```ini
+API_KEY=...                          # Gemini
+LLM_MODEL=gemini-2.5-flash
 LLM_TEMPERATURE=0.2
-RAG_CHUNK_LINES=15
-RAG_TOP_K=5
-ENSEMBLE_LLM_WEIGHT=0.70
-ENSEMBLE_BOW_WEIGHT=0.30
-CONFIDENCE_THRESHOLD=0.5
+APP_HOST=0.0.0.0                     # uvicorn 바인드
+APP_HOST_PUBLIC=localhost            # 브라우저 접속용
+APP_PORT=8000
+DASHBOARD_PORT=8501
+CORS_ORIGINS=http://localhost:3000,http://localhost:8501
 ```
 
-## Notes
+## 외부 데이터 경로 (`configs/paths.yaml`)
 
-- **보안**: 실제 강의 데이터는 절대 커밋 금지 (`data/`, `outputs/` 모두 gitignore)
-- **API 키**: `.env` 로만 관리, 코드에 하드코딩 금지
-- **RAG**: 임베딩 없이 청크 토큰 오버랩 기반 키워드 top-K 검색 (외부 임베딩 호출 없음)
-- **LLM 캐시**: 동일 청크 + 동일 프롬프트 = 동일 응답 → `.cache/llm` 에 저장
-- **인간 검토 표시**: 리포트에서 `confidence < 0.5` 항목은 "⚠ 인간 검토 권장" 으로 마킹
+STT 원본/메타데이터는 보안상 repo 밖에 두고 경로만 참조합니다.
 
-## 참고문헌
+```yaml
+data:
+  stt_dir: /절대/경로/to/stt
+  metadata_csv: /절대/경로/to/metadata.csv
+stt_filename_pattern: "{date}_{course_id}.txt"
+```
 
-1. Göllner, R., Lazarides, R., & Stark, R. (2025). *Revealing teaching quality through lesson semantics: A GPT-assisted analysis of transcripts*. British Journal of Educational Psychology. https://doi.org/10.1111/bjep.70001
-2. *Analyzing Large Language Models for Classroom Discussion Assessment*. EDM 2024. https://educationaldatamining.org/edm2024/proceedings/2024.EDM-short-papers.50/
-3. *Automated Evaluation of Classroom Instructional Support with LLMs and BoWs*. arXiv:2310.01132. 2023.
-4. *The Promises and Pitfalls of Using Language Models to Measure Instruction Quality in Education*. arXiv:2404.02444. 2024.
-5. *Leveraging Lecture Content for Improved Feedback: Explorations with GPT-4 and RAG*. ResearchGate. 2024.
-6. *Large Language Model-Powered Automated Assessment: A Systematic Review*. Applied Sciences (MDPI). 2024.
-7. *AI-based teaching evaluations: How well do they reflect student perceptions?*. Computers and Education: AI. 2025.
+## 영속화
+
+- DB 없음. `app/core/store.py` 가 `data/processed/scorecards/{instructor_id}/{lecture_date}.json` 로 InstructorScorecard 를 저장.
+- 강사 누적 조회·트렌드 회귀는 폴더 글로브 + 정렬로 수행 (`store.list_by_instructor`).
+- DB 도입은 데이터 규모/검색 요구가 커지는 시점의 후속 작업.
+
+## v2 초안과 현재의 차이 (히스토리)
+
+초기 v2 노션 설계는 RAG + BoW + Few-shot 앙상블이었으나, 실제 구현은 **항목별 모듈화 + 정량/LLM 단일 신호** 로 단순화되었습니다.
+
+| 영역 | 초안 (노션 PIPELINE) | 현재 구현 |
+|---|---|---|
+| 컨텍스트 | RAG 검색 (text-embedding-3-small + 코사인 top-K) | 항목별 직접 추출 (intro 30분 / 키워드 윈도우 / labeled 청크 / Q-A 페어) |
+| 신호원 | LLM 70% + BoW 30% 앙상블 | LLM 단독 또는 정량 단독 (항목별로 택1) |
+| Few-shot | 항목별 good/bad 예시 주입 | 미구현 (configs 잔존) |
+| LLM | OpenAI GPT-4o + LangChain | Google Gemini 직접 (google.generativeai) |
+| 문장 분리 | (지정 없음) | KSS (공유 입력) + Kiwi (sentencizer) — Mecab 에서 전환 |
+| 오케스트레이션 | `analyzer.py` + `ensemble.py` | `pipeline.py` 단일 진입점, 모듈 레지스트리 |
+| 영속화 | (미정) | `store.py` 파일 JSON |
+
+### 정리 대상 (미사용/구식 파일)
+
+다음은 초안의 잔존물로, 정리 또는 deprecated 표기가 필요합니다.
+
+- `app/analysis/analyzer.py`, `embedder.py`, `behavior_tagger.py`, `ensemble.py`, `templates.py` — placeholder, 코드 흐름 미사용
+- `configs/bow_indicators.yaml`, `configs/few_shot_examples.yaml` — 미사용
+- `app/analysis/prompts/system.yaml`, `prompts/items/01_repetition.yaml`, `04_learning_goal.yaml` — 새 `itemNN_*.yaml` 패턴으로 대체
+- `app/analysis/07_emphasis.py`, `11_prerequisite.py`, `14_practice_link.py` — `item07_*.py` 등으로 명명 통일 필요
+- `configs/checklist.yaml` ↔ `pipeline._ITEMS` 동기화 필요 (메타와 코드 등록 항목이 부분적으로 어긋남)
+
+## 보안 / 운영 메모
+
+- 실 강의 데이터는 절대 커밋 금지 (`data/`, `outputs/`, `configs/paths.yaml` 모두 gitignore 권장)
+- API 키는 `.env` 로만 관리, 코드에 하드코딩 금지
+- Gemini thinking-token 이 `max_output_tokens` 를 잠식하므로 출력 토큰 한도를 두지 않음 (`rubric_llm.judge` 주석 참고)
+- LLM 호출 동시성은 `concurrency` 파라미터(`pipeline.run(..., concurrency=10)`)로 제어
+
+## 참고 논문 (설계 초안 근거)
+
+1. Göllner et al. (2025). *Revealing teaching quality through lesson semantics: A GPT-assisted analysis of transcripts*. BJEP.
+2. *Analyzing Large Language Models for Classroom Discussion Assessment*. EDM 2024.
+3. *Automated Evaluation of Classroom Instructional Support with LLMs and BoWs*. arXiv:2310.01132.
+4. *The Promises and Pitfalls of Using Language Models to Measure Instruction Quality in Education*. arXiv:2404.02444.
+5. *Leveraging Lecture Content for Improved Feedback: Explorations with GPT-4 and RAG*. ResearchGate 2024.
+6. *Large Language Model-Powered Automated Assessment: A Systematic Review*. MDPI 2024.
+7. *AI-based teaching evaluations: How well do they reflect student perceptions?*. C&E AI 2025.
+
+> 위 논문은 v2 초안의 RAG/BoW/앙상블 설계 근거입니다. 현재 구현은 그 중 일부(루브릭 명시화, temperature 0.2, discrete vs high_inference 구분 의도)만 살아 있고, RAG/BoW/앙상블은 제외되었습니다.
