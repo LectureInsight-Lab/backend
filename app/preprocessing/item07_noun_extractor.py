@@ -15,6 +15,7 @@ utils.py → anchored_labeled.json 의 레코드를 받아
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict, Counter
 from pathlib import Path
 
@@ -28,8 +29,30 @@ USER_DICT_PATH = _BASE / "configs" / "kiwi_user_dict.yaml"
 MIN_WORD_LEN  = 2
 LABEL_ORDER   = ["개념", "예시", "실습"]
 
+# [Step3 개선] 2026-06-29: ASR 노이즈 토큰 필터
+# 문제: Kiwi가 STT 오인식 토큰을 NNG로 잘못 분류하여 KeyBERT 후보 풀에 진입.
+#       IDF 부스트 이후 이 노이즈가 골드 키워드를 밀어냄.
+# 해결: 명백한 노이즈 패턴을 정규식으로 걸러냄.
+#   - 숫자로 시작 (예: 2언더버지)
+#   - 야데/기서/해서기 등 동사 어미가 붙은 오결합 (예: 리플레이스야데, 시작해서기서)
+_NOISE_TOKEN_RE = re.compile(
+    r"^\d"          # 숫자 시작 토큰
+    r"|야데$"        # ~야데 (동사+강조 오결합)
+    r"|기서$"        # ~기서 (동사형 오결합)
+    r"|해서기$"      # ~해서기
+    r"|에서기$"      # ~에서기
+)
+
 # DF 자동 불용어에서 보호할 골드 핵심 용어
-GOLD_WHITELIST = {"인덱스", "스트림", "버퍼", "트랜잭션"}
+# [Step1 개선] 2026-06-29: MySQL 문자열 함수 강의 핵심 용어 보호 추가
+# 이유: DF 자동 불용어가 강의별 핵심 SQL 함수 이름을 제거할 수 있음
+GOLD_WHITELIST = {
+    # 기존 Java 강의 보호 용어
+    "인덱스", "스트림", "버퍼", "트랜잭션",
+    # MySQL 문자열 함수 보호 (2026-02-09 기준, 타 날짜에도 등장 가능)
+    "리플레이스", "트림", "콘캣", "캐릭터셋", "콜레이션",
+    "오토인클라이먼트", "베이스64", "로드언더바파일", "프라이머리키",
+}
 
 # ── 수동 불용어 ────────────────────────────────────────────────────────────────
 STOPWORDS: set[str] = {
@@ -111,6 +134,14 @@ COMPOUND_MERGE: list[tuple[str, str]] = [
     ("에러 로그",          "에러로그"),
     ("마이 SQL",           "마이SQL"),
     ("이노 DB",            "이노DB"),
+    # [Step1 개선] 2026-06-29: 2026-02-09 MySQL 문자열 함수 강의 복합어 패턴 추가
+    # 문제: STT에서 공백 분절된 복합 기술 용어가 kiwi_user_dict 등록 형태와 불일치
+    # 해결: 분석 전 전처리 단계에서 단일 토큰으로 합치고 사용자 사전이 인식하게 함
+    ("오토 인클라이먼트",  "오토인클라이먼트"),   # AUTO_INCREMENT 공백 변형
+    ("베이스 64",          "베이스64"),            # BASE64 (숫자 분리 방지)
+    ("로드 언더바 파일",   "로드언더바파일"),      # LOAD_FILE (3어절 복합어)
+    ("프라이머리 키",      "프라이머리키"),        # PRIMARY KEY (2어절 복합어)
+    ("캐릭터 셋",          "캐릭터셋"),            # CHARACTER SET 공백 변형
 ]
 
 
@@ -162,7 +193,12 @@ class NounExtractor:
         logger.info(f"[NounExtractor] 사용자 사전 {count}개 등록")
 
     def _add_df_stopwords(self, records: list[dict]) -> None:
-        """DF=전체날짜 단어를 자동 불용어로 추가 (GOLD_WHITELIST 제외)."""
+        """DF=전체날짜 단어를 자동 불용어로 추가 (GOLD_WHITELIST 제외).
+
+        [Step2 개선] 2026-06-29: df_counter와 n_docs를 인스턴스 속성으로 노출
+        이유: KeyBERT 점수에 IDF 가중치를 곱하는 리랭킹(Step2)에서 재사용하기 위함.
+             pipeline에서 noun_ex.df_counter, noun_ex.n_docs 로 접근 가능.
+        """
         doc_sets: dict[str, set[str]] = defaultdict(set)
         for rec in records:
             fname = rec.get("file", "")
@@ -180,6 +216,10 @@ class NounExtractor:
             for w in ws:
                 df_counter[w] += 1
 
+        # [Step2 개선] IDF 계산용으로 외부에 노출
+        self.df_counter: Counter[str] = df_counter
+        self.n_docs: int = n_docs
+
         auto = {w for w, cnt in df_counter.items() if cnt >= n_docs} - GOLD_WHITELIST
         self._stopwords.update(auto)
         logger.info(
@@ -196,6 +236,7 @@ class NounExtractor:
                 tok.tag in ("NNG", "NNP")
                 and len(tok.form) >= MIN_WORD_LEN
                 and tok.form not in self._stopwords
+                and not _NOISE_TOKEN_RE.search(tok.form)  # [Step3] 노이즈 토큰 제거
             ):
                 seen[tok.form] = None
         return list(seen)

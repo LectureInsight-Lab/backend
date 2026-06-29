@@ -33,31 +33,43 @@ import pandas as pd
 
 from app.preprocessing import error_handling, question, sequence_violation, summary
 from app.analysis import (
+    item01_repetition,
     item04_learning_objectives,
     item05_review_linkage,
+    item07_emphasis,
     item09_concept_definition,
     item10_example_coverage,
+    item11_prerequisite,
     item13_example_relevance,
+    item14_practice_link,
 )
 from app.preprocessing.utils import PROCESSED_DIR, label_from_csv, parse_and_split
 
+# ── item07 래퍼: (date, txt_path) 시그니처를 (txt_path,) 로 통일 ──────────────
+def _run_item07(txt_path: Path) -> dict:
+    date = txt_path.stem.split("_")[0]
+    return item07_emphasis.score_keyword_emphasis(date, txt_path)
+
+
 # ── 18개 평가 항목 레지스트리 ─────────────────────────────────────────────────
-# (결과 키, 모듈, 입력 종류, 출력 종류)
-#   입력 종류: "kss" | "labeled"
+# (결과 키, callable, 입력 종류, 출력 종류)
+#   입력 종류: "kss" | "labeled" | "txt"
 #   출력 종류: "score" | "chunk"
-#   항목 4·5·9·10·13: app.analysis.itemNN_* 모듈이 내부에서 preprocessing chunk emitter를
-#   호출해 LLM 채점까지 수행 → "score" 타입.
 _ITEMS: list[tuple[str, object, str, str]] = [
-    ("question",            question,                   "kss",     "chunk"),
-    ("summary",             summary,                    "kss",     "chunk"),
-    ("error_handling",      error_handling,             "labeled", "score"),
-    ("sequence_violation",  sequence_violation,         "labeled", "score"),
-    ("learning_objectives", item04_learning_objectives, "kss",     "score"),
-    ("review_linkage",      item05_review_linkage,      "kss",     "score"),
-    ("concept_definition",  item09_concept_definition,  "labeled", "score"),
-    ("example_coverage",    item10_example_coverage,    "labeled", "score"),
-    ("example_relevance",   item13_example_relevance,   "labeled", "score"),
-    # TODO: 나머지 9개 항목 추가
+    ("repetition",          item01_repetition.score_repetition,            "txt",     "score"),
+    ("question",            question.run,                                  "kss",     "chunk"),
+    ("summary",             summary.run,                                   "kss",     "chunk"),
+    ("error_handling",      error_handling.run,                            "labeled", "score"),
+    ("sequence_violation",  sequence_violation.run,                        "labeled", "score"),
+    ("learning_objectives", item04_learning_objectives.run,                "kss",     "score"),
+    ("review_linkage",      item05_review_linkage.run,                     "kss",     "score"),
+    ("keyword_emphasis",    _run_item07,                                   "txt",     "score"),
+    ("concept_definition",  item09_concept_definition.run,                 "labeled", "score"),
+    ("example_coverage",    item10_example_coverage.run,                   "labeled", "score"),
+    ("prerequisite",        item11_prerequisite.score_prerequisite,        "txt",     "score"),
+    ("example_relevance",   item13_example_relevance.run,                  "labeled", "score"),
+    ("practice_link",       item14_practice_link.score_practice_link,      "labeled", "score"),
+    # TODO: 나머지 5개 항목 추가
 ]
 
 
@@ -79,7 +91,7 @@ def run(txt_path: str | Path, concurrency: int = 10) -> dict:
     labeled_df = pd.DataFrame(label_from_csv(csv_path, concurrency=concurrency))
 
     # ── 전체 항목 실행 + 병합 ────────────────────────────────────
-    inputs = {"kss": kss_df, "labeled": labeled_df}
+    inputs = {"kss": kss_df, "labeled": labeled_df, "txt": txt_path}
     final_score, chunk = asyncio.run(_run_all(inputs, concurrency))
 
     return {
@@ -99,8 +111,8 @@ async def _run_all(
         (final_score 섹션, chunk 섹션)
     """
     tasks = [
-        _run_item(module.run, inputs[src], concurrency)
-        for _, module, src, _ in _ITEMS
+        _run_item(run_fn, inputs[src], concurrency)
+        for _, run_fn, src, _ in _ITEMS
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 

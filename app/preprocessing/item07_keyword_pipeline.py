@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from collections import defaultdict
 from pathlib import Path
 
@@ -70,7 +71,7 @@ def run_pipeline(
     """
     from keybert import KeyBERT
     from sentence_transformers import SentenceTransformer
-    from app.preprocessing.noun_extractor import NounExtractor, normalize_text
+    from app.preprocessing.item07_noun_extractor import NounExtractor, normalize_text
 
     labeled_path = Path(labeled_path)
     output_path  = Path(output_path)
@@ -109,6 +110,20 @@ def run_pipeline(
     logger.info(f"[Pipeline] 모델 로딩: {model_name}")
     kb = KeyBERT(model=SentenceTransformer(model_name))
 
+    # [Step2 개선] 2026-06-29: IDF 가중치 준비
+    # 문제: KeyBERT는 문서 전체를 대표하는 단어(문자열, 인덱스 등 일반어)를 선호하여
+    #       특정 날짜에 집중 등장하는 도메인 용어(리플레이스, 트림 등)가 낮은 순위를 받음.
+    # 해결: keybert_score × idf(단어) 로 최종 점수를 재산정.
+    #       IDF = log(전체날짜수 / 등장날짜수 + 1) + 1
+    #       → 많은 날짜에 등장할수록 IDF 낮음 → 최종 점수 낮아짐
+    #       → 특정 날짜에만 집중 등장하면 IDF 높음 → 최종 점수 높아짐
+    df_counter = getattr(noun_ex, "df_counter", {})
+    n_docs     = getattr(noun_ex, "n_docs", 1)
+
+    def idf(word: str) -> float:
+        df = df_counter.get(word, 0)
+        return math.log(n_docs / (df + 1) + 1)
+
     results: dict[str, list[tuple[str, float]]] = {}
     for date in sorted(date_nouns):
         nouns = date_nouns[date]
@@ -119,14 +134,43 @@ def run_pipeline(
             results[date] = []
             continue
 
-        logger.info(f"[Pipeline] {date} — 명사 후보 {len(nouns)}개 → top-{top_n} 추출")
+        # [Step4] TF(날짜 내 등장 빈도) 사전 계산
+        tf_map: dict[str, int] = {}
+        for noun in nouns:
+            tf_map[noun] = text.count(noun)
+
+        def tf_boost(word: str) -> float:
+            return math.log(1 + tf_map.get(word, 0))
+
+        # [Step5 개선] 2026-06-29: 가산형(additive) 하이브리드 점수로 전환
+        # 문제: 곱셈형 공식(Step4) keybert × idf × tf_boost 에서
+        #       트림(rank=242, sim=0.097), 콘캣(rank=184, sim=0.14) 등
+        #       KeyBERT 유사도가 낮은 SQL 함수명은 TF가 높아도 최종 점수가 0에 수렴.
+        #       BLLB/캐릭터셋/콜레이션은 임베딩 유사도 자체가 0.00 → 완전 제외.
+        # 해결: idf × (keybert_sim + GAMMA × log(1+tf)) 가산형으로 변경.
+        #       keybert_sim=0 이어도 GAMMA × tf_boost 항이 살아있어 점수 획득 가능.
+        #       IDF가 낮은 일반어(문자열, 함수)는 TF가 높아도 전체 점수가 억제됨.
+        #       → top_n*5 상한 제거: MIN_KEYBERT_SCORE 필터도 불필요, 전체 후보 스코어링.
+        GAMMA = 0.3
+
+        logger.info(f"[Pipeline] {date} — 명사 후보 {len(nouns)}개 → top-{top_n} 추출 (가산형 하이브리드)")
         raw = kb.extract_keywords(
             text,
             candidates=nouns,
-            top_n=top_n,
-            use_mmr=False,   # exp05: MMR은 도메인 클러스터에 역효과
+            top_n=len(nouns),  # [Step5] 전체 후보 스코어링 (상한 없음)
+            use_mmr=False,     # exp05: MMR은 도메인 클러스터에 역효과
         )
-        results[date] = sorted(raw, key=lambda x: x[1], reverse=True)
+        # KeyBERT가 반환하지 않는 후보(유사도=0)는 0.0으로 기본 처리
+        raw_score: dict[str, float] = {w: max(s, 0.0) for w, s in raw}
+        reranked = sorted(
+            [
+                (noun, idf(noun) * (raw_score.get(noun, 0.0) + GAMMA * tf_boost(noun)))
+                for noun in nouns
+            ],
+            key=lambda x: x[1],
+            reverse=True,
+        )[:top_n]
+        results[date] = reranked
         logger.debug(f"  → {[w for w, _ in results[date]]}")
 
     # ── Step 5: JSON 저장 ─────────────────────────────────────────────────────
