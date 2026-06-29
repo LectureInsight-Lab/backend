@@ -419,20 +419,6 @@ stt_filename_pattern: "{date}_{course_id}.txt"
 - 강사 누적 조회·트렌드 회귀는 폴더 글로브 + 정렬로 수행 (`store.list_by_instructor`).
 - DB 도입은 데이터 규모/검색 요구가 커지는 시점의 후속 작업.
 
-## v2 초안과 현재의 차이 (히스토리)
-
-초기 v2 노션 설계는 RAG + BoW + Few-shot 앙상블이었으나, 실제 구현은 **항목별 모듈화 + 정량/LLM 단일 신호** 로 단순화되었습니다.
-
-| 영역 | 초안 (노션 PIPELINE) | 현재 구현 |
-|---|---|---|
-| 컨텍스트 | RAG 검색 (text-embedding-3-small + 코사인 top-K) | 항목별 직접 추출 (intro 30분 / 키워드 윈도우 / labeled 청크 / Q-A 페어) |
-| 신호원 | LLM 70% + BoW 30% 앙상블 | LLM 단독 또는 정량 단독 (항목별로 택1) |
-| Few-shot | 항목별 good/bad 예시 주입 | 미구현 (configs 잔존) |
-| LLM | OpenAI GPT-4o + LangChain | Google Gemini 직접 (google.generativeai) |
-| 문장 분리 | (지정 없음) | KSS (공유 입력) + Kiwi (sentencizer) — Mecab 에서 전환 |
-| 오케스트레이션 | `analyzer.py` + `ensemble.py` | `pipeline.py` 단일 진입점, 모듈 레지스트리 |
-| 영속화 | (미정) | `store.py` 파일 JSON |
-
 ### 정리 대상 (미사용/구식 파일)
 
 다음은 초안의 잔존물로, 정리 또는 deprecated 표기가 필요합니다.
