@@ -370,7 +370,8 @@ async def _classify_one(
 
     async with semaphore:
         try:
-            response = await client.aio.models.generate_content(
+            response = await asyncio.to_thread(
+                client.models.generate_content,
                 model=_LLM_MODEL,
                 contents=_make_prompt(row["anchor_text"], row["text"]),
                 config=types.GenerateContentConfig(

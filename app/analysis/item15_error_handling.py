@@ -71,7 +71,8 @@ async def _verify_one(client, sem: asyncio.Semaphore, idx: int, row: dict) -> di
     )
     async with sem:
         try:
-            resp = await client.aio.models.generate_content(
+            resp = await asyncio.to_thread(
+                client.models.generate_content,
                 model=_LLM_MODEL,
                 contents=prompt,
                 config=types.GenerateContentConfig(
@@ -112,7 +113,8 @@ async def _eval_criterion(client, criterion: str, row: dict) -> dict:
 
     prompt = _make_abc_prompt(criterion, row)
     try:
-        resp = await client.aio.models.generate_content(
+        resp = await asyncio.to_thread(
+            client.models.generate_content,
             model=_LLM_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(

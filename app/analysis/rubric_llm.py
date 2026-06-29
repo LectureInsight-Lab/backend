@@ -71,8 +71,11 @@ async def judge(system: str, user: str, sem: asyncio.Semaphore) -> dict:
     contents = f"{system}\n\n{user}"
     async with sem:
         try:
-            resp = await _get_client().aio.models.generate_content(
-                model=settings.llm_model, contents=contents, config=cfg
+            resp = await asyncio.to_thread(
+                _get_client().models.generate_content,
+                model=settings.llm_model,
+                contents=contents,
+                config=cfg,
             )
             return _parse_json(resp.text)
         except Exception as e:  # noqa: BLE001
