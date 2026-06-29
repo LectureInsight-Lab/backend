@@ -345,7 +345,10 @@ InstructorScorecard {
 ## 18개 체크리스트 항목
 
 `configs/checklist.yaml` 의 메타와 실제 구현 상태를 함께 표기합니다.
-**현재 `pipeline._ITEMS` 에 15개 등록** (id 2·3·4·5·6·8·9·10·12·13·14·15·16·17·18). **미등록 3개: 1·7·11**(각 `run()` 어댑터 필요). item14 는 KR-SBERT 필요 → `[embeddings]` 미설치 시 런타임 자동 스킵.
+**현재 `pipeline._ITEMS` 에 18개 전부 등록.** 단, 일부는 **조건부 동작**:
+- **item07(핵심 강조)**: `data/processed/keywords.json`(KeyBERT 전처리 산출, `python -m app.preprocessing.keyword_pipeline`) 필요 → 없으면 `N/A`.
+- **item11(선행 개념)·item14(실습 연계)**: KR-SBERT 필요 → `[embeddings]` 미설치 시 런타임 자동 스킵.
+- 입력 종류는 `kss` / `labeled` / `sentences`(항목 2·3) / `txt_path`(원본 STT 직접 파싱: 항목 1·7·11) 4종.
 
 | ID | 항목 | 카테고리 | 유형 | preprocessing | analysis | 채점 방식 | 비고 |
 |---|---|---|---|---|---|---|---|

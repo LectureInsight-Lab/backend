@@ -38,6 +38,7 @@ from app.analysis import (
     item05_review_linkage,
     item07_emphasis,
     item06_sequence_violation,
+    item07_emphasis,
     item08_summary,
     item09_concept_definition,
     item10_example_coverage,
@@ -95,6 +96,56 @@ _ITEMS: list[tuple[str, object, str, str]] = [
     ("comprehension",       item16_comprehension_check.run,            "kss",       "score"),  # 16
     ("engagement",          item17_engagement.run,                     "kss",       "score"),  # 17
     ("question",            item18_question.run,                       "kss",       "score"),  # 18
+    ("repetition",          item01_repetition.score_repetition,            "txt",     "score"),
+    ("question",            question.run,                                  "kss",     "chunk"),
+    ("summary",             summary.run,                                   "kss",     "chunk"),
+    ("error_handling",      error_handling.run,                            "labeled", "score"),
+    ("sequence_violation",  sequence_violation.run,                        "labeled", "score"),
+    ("learning_objectives", item04_learning_objectives.run,                "kss",     "score"),
+    ("review_linkage",      item05_review_linkage.run,                     "kss",     "score"),
+    ("keyword_emphasis",    _run_item07,                                   "txt",     "score"),
+    ("concept_definition",  item09_concept_definition.run,                 "labeled", "score"),
+    ("example_coverage",    item10_example_coverage.run,                   "labeled", "score"),
+    ("prerequisite",        item11_prerequisite.score_prerequisite,        "txt",     "score"),
+    ("example_relevance",   item13_example_relevance.run,                  "labeled", "score"),
+    ("practice_link",       item14_practice_link.score_practice_link,      "labeled", "score"),
+    # TODO: 나머지 5개 항목 추가
+    # item04
+    ("learning_objectives", item04_learning_objectives, "kss",     "score"),
+    # item05
+    ("review_linkage",      item05_review_linkage,      "kss",     "score"),
+    # item06 — analysis 모듈이 내부에서 preprocessing 호출
+    ("sequence_violation",  item06_sequence_violation,  "labeled", "score"),
+    # item08 — preprocessing → Gemini 채점: 마무리 요약 충실도
+    ("summary",             item08_summary,             "kss",     "score"),
+    # item09
+    ("concept_definition",  item09_concept_definition,  "labeled", "score"),
+    # item10
+    ("example_coverage",    item10_example_coverage,    "labeled", "score"),
+    # item13
+    ("example_relevance",   item13_example_relevance,   "labeled", "score"),
+    # item15 — analysis 모듈이 내부에서 preprocessing 호출
+    ("error_handling",      item15_error_handling,      "labeled", "score"),
+    # item18 — preprocessing → Gemini 채점: 질문 응답 충분성
+    ("question",            item18_question,            "kss",     "score"),
+    # item14 — analysis 모듈, labeled 청크로 이론↔실습 LLM 비교 채점
+    ("practice_link",       item14_practice_link,       "labeled", "score"),
+    # item12 — preprocessing, 발화 속도(분당 음절) 규칙 채점
+    ("pace",                item12_pace,                "kss",     "score"),
+    # item16 — preprocessing, 이해 확인 질문 빈도/타이밍 규칙 채점
+    ("comprehension",       item16_comprehension_check, "kss",     "score"),
+    # item17 — preprocessing, 참여 유도 빈도/대기/피드백 규칙 채점
+    ("engagement",          item17_engagement,          "kss",       "score"),
+    # item02 — Kiwi 문장화 → 완결 문장 비율(EF 종결) 규칙 채점
+    ("completeness",        item02_completeness,        "sentences", "score"),
+    # item03 — Kiwi 문장화 → 말투 일관성(존/반/중립) 규칙 채점
+    ("consistency",         item03_consistency,         "sentences", "score"),
+    # item01 — 원본 txt 직접 파싱, 불필요 표현 비율(FWR) 규칙 채점
+    ("repetition",          item01_repetition,          "txt_path",  "score"),
+    # item07 — 원본 txt + keywords.json(KeyBERT) 강조 탐지 (keywords.json 없으면 N/A)
+    ("emphasis",            item07_emphasis,            "txt_path",  "score"),
+    # item11 — 원본 txt 2분 청크 KR-SBERT 선행 개념 확인 ([embeddings] 필요, 미설치 시 스킵)
+    ("prerequisite",        item11_prerequisite,        "txt_path",  "score"),
 ]
 
 
@@ -138,6 +189,15 @@ def run(
         "txt_path": txt_path,     # 항목 1·7·11 (원본 STT 직접 파싱)
     }
     logger.info(f"[pipeline] 3/3 평가 항목 {len(_ITEMS)}개 순차 실행…")
+    # ── 전체 항목 실행 + 병합 ────────────────────────────────────
+    # txt_path: 원본 STT 파일을 직접 파싱하는 항목(1·7·11)용 공유 입력.
+    inputs = {"kss": kss_df, "labeled": labeled_df, "sentences": sentences, "txt_path": txt_path}
+    inputs = {"kss": kss_df, "labeled": labeled_df, "txt": txt_path}
+    final_score, chunk = asyncio.run(_run_all(inputs, concurrency))
+    inputs = {"kss": kss_df, "labeled": labeled_df}
+    details, chunk = asyncio.run(_run_all(inputs, concurrency))
+    inputs = {"kss": kss_df, "labeled": labeled_df, "sentences": sentences}
+    logger.info(f"[pipeline] 3/3 평가 항목 {len(_ITEMS)}개 병렬 실행…")
     progress.items(len(_ITEMS))
     progress.stage(f"평가 항목 {len(_ITEMS)}개 분석 중…", 16)
     details, chunk = asyncio.run(_run_all(inputs, concurrency, progress))
@@ -182,6 +242,11 @@ _KEY_TO_ID: dict[str, int] = {
     "comprehension": 16,
     "engagement": 17,
     "question": 18,
+    "completeness": 2,
+    "consistency": 3,
+    "repetition": 1,
+    "emphasis": 7,
+    "prerequisite": 11,
 }
 
 
@@ -321,12 +386,37 @@ async def _run_all(
     details: dict = {}
     chunk: dict = {}
     for idx, (key, run_fn, src, out) in enumerate(ordered, start=1):
+    total = len(_ITEMS)
+    completed = 0
+
+    async def _logged(key: str, run_fn, df: pd.DataFrame):
+        nonlocal completed
+        logger.info(f"[pipeline]   ▷ [{key}] 채점 시작 (입력 {len(df)} 행)")
+        res = await _run_item(run_fn, df, concurrency)
+        completed += 1
+        score = res.get("final_score") if isinstance(res, dict) else None
+        logger.info(f"[pipeline]   ◁ [{key}] 채점 완료 — final_score={score}")
+        progress.item_done(key, score, completed, total)
+        return res
+
+    tasks = [
+        _run_item(run_fn, inputs[src], concurrency)
+        for _, run_fn, src, _ in _ITEMS
+        _logged(key, module.run, inputs[src])
+        for key, module, src, _ in _ITEMS
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    details: dict = {}
+    chunk: dict = {}
+    for idx, (key, module, src, out) in enumerate(ordered, start=1):
         df = inputs[src]
         n = len(df) if hasattr(df, "__len__") else "txt"  # txt_path 입력은 len() 없음
         item_id = _KEY_TO_ID.get(key, "?")
         logger.info(f"[pipeline]   ▷ ({idx}/{total}) item{item_id} [{key}] 채점 시작 (입력 {n} 행)")
         try:
             res = await _run_item(run_fn, df, concurrency)
+            res = await _run_item(module.run, df, concurrency)
         except Exception as e:  # noqa: BLE001 — 한 항목 실패가 전체를 막지 않도록
             logger.error(f"[pipeline]   ✗ item{item_id} [{key}] 실패 — {type(e).__name__}: {e}")
             res = {"error": f"{type(e).__name__}: {e}"}
