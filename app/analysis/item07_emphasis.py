@@ -35,6 +35,16 @@ ITEM_NAME   = "핵심 강조"
 CATEGORY_ID = 2
 
 
+def run(txt_path) -> dict:
+    """원본 STT txt 경로 → 핵심 강조 점수 (항목 7). 파이프라인 진입점.
+
+    날짜는 파일명 stem('{date}_{id}')에서 추출. keywords.json(KeyBERT 전처리 산출)이
+    없거나 해당 날짜 키워드가 없으면 N/A 반환(graceful skip).
+    """
+    date = Path(txt_path).stem.split("_", 1)[0]
+    return score_keyword_emphasis(date, txt_path)
+
+
 def score_keyword_emphasis(
     date:          str,
     txt_path:      str | Path,
