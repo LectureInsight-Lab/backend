@@ -88,6 +88,27 @@ jpa_hibernate:
     - 페치조인
     - 네이티브쿼리
 
+# [Step1 개선] 2026-06-29
+# 문제: 2026-02-09 MySQL 문자열 함수 강의 핵심 용어가 사전에 없어 Kiwi가 음절 단위로 쪼갬
+#       골드셋 대비 KeyBERT Precision/Recall 10% → 개선 목표
+# 진단 결과:
+#   - 캐릭터셋 → 캐릭터(NNG) + 셋(NR) 분리 → 단일 토큰으로 등록 필요
+#   - BLLB(BLOB ASR 오인식) → SL(외국어)로 인식 → NNP로 등록 필요
+#   - 로드언더바파일, 프라이머리키, 베이스64 → COMPOUND_MERGE 후 단일 토큰 등록 필요
+mysql_string_functions:
+  pos: NNG
+  words:
+    - 오토인클라이먼트   # AUTO_INCREMENT (공백 변형: COMPOUND_MERGE → 오토 인클라이먼트)
+    - 캐릭터셋           # CHARACTER SET (Kiwi 분리 문제: 캐릭터+셋 → 단일 등록)
+    - 베이스64           # BASE64 (COMPOUND_MERGE: 베이스 64 → 베이스64)
+    - 로드언더바파일     # LOAD_FILE (COMPOUND_MERGE: 로드 언더바 파일 → 단일 토큰)
+    - 프라이머리키       # PRIMARY KEY (COMPOUND_MERGE: 프라이머리 키 → 단일 토큰)
+
+mysql_string_functions_en:
+  pos: NNP
+  words:
+    - BLLB   # BLOB의 ASR 오인식 표기 — 외국어(SL)가 아닌 고유명사로 명사 추출 가능하게
+
 spring:
   pos: NNG
   words:

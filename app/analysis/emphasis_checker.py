@@ -19,7 +19,7 @@ from collections import defaultdict
 
 from loguru import logger
 
-from app.preprocessing.noun_extractor import normalize_text
+from app.preprocessing.item07_noun_extractor import normalize_text
 
 # ── 파라미터 ──────────────────────────────────────────────────────────────────
 WINDOW_UTTERS = 3    # 키워드 발화 앞뒤 탐색 반경 (발화 단위)
@@ -55,6 +55,15 @@ _EMPHASIS_RE = re.compile(
     r"|알고\s+(가셔야|가야|가자|가세요|계셔야)"
     # 주의 신호 ("주의할 점은", "주의할 것")
     r"|주의할\s*(점|것|거)"
+    # 알아야/있어야 계열 (FN 보완: "알아야 됩니다", "알아야 돼", "알고 있어야")
+    r"|알아야\s*(되는|돼|됩|된다|되고|합니다)"
+    r"|알고\s+있어야"
+    # 확인/점검 필수 (FN 보완: "확인해야 된다")
+    r"|확인해야\s*(된다|돼|됩)"
+    # 시험 출제 언급 (FN 보완: "많이 틀리는데" — 빈출 오답 강조)
+    r"|많이\s*틀리"
+    # 정리/요약 강조 (FN 보완: "정리해드리는데", "정리 리플레이스는")
+    r"|정리\s*해드리"
 )
 
 
