@@ -72,7 +72,6 @@ def classify_formality(ending_morph: str | None, ending_tag: str | None) -> str:
 #   높임어간(시)+반말어미 혼용은 6%뿐(94%는 순수 해체). 즉 측정 버그 아님.
 # [결정 2026-06-22] '혼용=감점' 현행 유지 — 일관성을 엄격히 적용. 친근한 혼합 화법이라도
 #   존/반 ≈50/50 은 최저점(현 강사 1점)으로 확정. 추후 팀이 재론하면 밴드 조정.
-# violation_count 미반영. 적용 범위: 단일 강사(팀 안내). 재론 시 docs/scoring-bands.md + 팀 협의.
 def consistency_score(ratio: float) -> int:
     """consistency_ratio(%, 50~100) → 1~5 (잠정 밴드; 측정 검증됨, 혼용=감점 현행 유지). 상세는 위 주석/문서."""
     if ratio >= 90:

@@ -31,17 +31,20 @@ from pathlib import Path
 
 import pandas as pd
 
-from app.preprocessing import error_handling, question, sequence_violation, summary
 from app.analysis import (
     item01_repetition,
     item04_learning_objectives,
     item05_review_linkage,
     item07_emphasis,
+    item06_sequence_violation,
+    item08_summary,
     item09_concept_definition,
     item10_example_coverage,
     item11_prerequisite,
     item13_example_relevance,
     item14_practice_link,
+    item15_error_handling,
+    item18_question,
 )
 from app.preprocessing.utils import PROCESSED_DIR, label_from_csv, parse_and_split
 
@@ -70,6 +73,25 @@ _ITEMS: list[tuple[str, object, str, str]] = [
     ("example_relevance",   item13_example_relevance.run,                  "labeled", "score"),
     ("practice_link",       item14_practice_link.score_practice_link,      "labeled", "score"),
     # TODO: 나머지 5개 항목 추가
+    # item04
+    ("learning_objectives", item04_learning_objectives, "kss",     "score"),
+    # item05
+    ("review_linkage",      item05_review_linkage,      "kss",     "score"),
+    # item06 — analysis 모듈이 내부에서 preprocessing 호출
+    ("sequence_violation",  item06_sequence_violation,  "labeled", "score"),
+    # item08 — preprocessing → Gemini 채점: 마무리 요약 충실도
+    ("summary",             item08_summary,             "kss",     "score"),
+    # item09
+    ("concept_definition",  item09_concept_definition,  "labeled", "score"),
+    # item10
+    ("example_coverage",    item10_example_coverage,    "labeled", "score"),
+    # item13
+    ("example_relevance",   item13_example_relevance,   "labeled", "score"),
+    # item15 — analysis 모듈이 내부에서 preprocessing 호출
+    ("error_handling",      item15_error_handling,      "labeled", "score"),
+    # item18 — preprocessing → Gemini 채점: 질문 응답 충분성
+    ("question",            item18_question,            "kss",     "score"),
+    # TODO: 나머지 9개 항목 추가
 ]
 
 
@@ -93,11 +115,17 @@ def run(txt_path: str | Path, concurrency: int = 10) -> dict:
     # ── 전체 항목 실행 + 병합 ────────────────────────────────────
     inputs = {"kss": kss_df, "labeled": labeled_df, "txt": txt_path}
     final_score, chunk = asyncio.run(_run_all(inputs, concurrency))
+    inputs = {"kss": kss_df, "labeled": labeled_df}
+    details, chunk = asyncio.run(_run_all(inputs, concurrency))
 
     return {
         "evaluated_at": datetime.now().isoformat(timespec="seconds"),
         "source": txt_path.name,
-        "final_score": final_score,
+        "scores": {
+            key: (val.get("final_score") if isinstance(val, dict) else None)
+            for key, val in details.items()
+        },
+        "details": details,
         "chunk": chunk,
     }
 
@@ -108,7 +136,7 @@ async def _run_all(
     """레지스트리의 모든 항목을 실행하고 출력 종류별로 두 섹션으로 나눈다.
 
     Returns:
-        (final_score 섹션, chunk 섹션)
+        (details 섹션, chunk 섹션)
     """
     tasks = [
         _run_item(run_fn, inputs[src], concurrency)
@@ -116,13 +144,13 @@ async def _run_all(
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    final_score: dict = {}
+    details: dict = {}
     chunk: dict = {}
     for (key, _, _, out), res in zip(_ITEMS, results):
         if isinstance(res, Exception):
             res = {"error": f"{type(res).__name__}: {res}"}
-        (final_score if out == "score" else chunk)[key] = res
-    return final_score, chunk
+        (details if out == "score" else chunk)[key] = res
+    return details, chunk
 
 
 async def _run_item(run_fn, df: pd.DataFrame, concurrency: int):
@@ -149,5 +177,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     result = run(args.txt_path, concurrency=args.concurrency)
-    print(f"final_score: {list(result['final_score'].keys())}")
-    print(f"chunk:       {list(result['chunk'].keys())}")
+    print("scores:")
+    for key, score in result["scores"].items():
+        print(f"  {key}: {score}")
+    if result["chunk"]:
+        print(f"chunk: {list(result['chunk'].keys())}")

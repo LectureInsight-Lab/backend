@@ -18,7 +18,8 @@ class Settings(BaseSettings):
 
     # ── LLM (Gemini) ───────────────────────────────────────
     api_key: str = ""                          # .env: API_KEY (Gemini API key)
-    llm_model: str = "models/gemini-2.5-flash"  # .env: LLM_MODEL
+    llm_model: str = "models/gemini-2.5-flash"  # .env: LLM_MODEL (production 채점)
+    eval_model: str = "models/gemini-2.5-pro"   # .env: EVAL_MODEL (골든셋 라벨러/평가 — 강한 모델)
     llm_temperature: float = 0.2               # Paper #6: 일관된 채점
 
     # ── RAG (키워드 검색, 임베딩 없음) ──────────────────────
