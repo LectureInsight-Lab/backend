@@ -138,15 +138,6 @@ def run(
         "txt_path": txt_path,     # 항목 1·7·11 (원본 STT 직접 파싱)
     }
     logger.info(f"[pipeline] 3/3 평가 항목 {len(_ITEMS)}개 순차 실행…")
-    # ── 전체 항목 실행 + 병합 ────────────────────────────────────
-    # txt_path: 원본 STT 파일을 직접 파싱하는 항목(1·7·11)용 공유 입력.
-    inputs = {"kss": kss_df, "labeled": labeled_df, "sentences": sentences, "txt_path": txt_path}
-    inputs = {"kss": kss_df, "labeled": labeled_df, "txt": txt_path}
-    final_score, chunk = asyncio.run(_run_all(inputs, concurrency))
-    inputs = {"kss": kss_df, "labeled": labeled_df}
-    details, chunk = asyncio.run(_run_all(inputs, concurrency))
-    inputs = {"kss": kss_df, "labeled": labeled_df, "sentences": sentences}
-    logger.info(f"[pipeline] 3/3 평가 항목 {len(_ITEMS)}개 병렬 실행…")
     progress.items(len(_ITEMS))
     progress.stage(f"평가 항목 {len(_ITEMS)}개 분석 중…", 16)
     details, chunk = asyncio.run(_run_all(inputs, concurrency, progress))
