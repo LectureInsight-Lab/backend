@@ -21,7 +21,6 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-import google.generativeai as genai
 import pandas as pd
 
 from pathlib import Path as _Path
@@ -31,10 +30,20 @@ import yaml as _yaml
 from app.core.config import settings
 from app.preprocessing.item15_error_handling import run as build_candidates
 
-genai.configure(api_key=settings.api_key)
-
 _LLM_MODEL = settings.llm_model
 _LLM_TEMPERATURE = settings.llm_temperature
+
+# Gemini 신 SDK 클라이언트 (지연 초기화)
+_client = None
+
+
+def _get_client():
+    global _client
+    if _client is None:
+        from google import genai
+
+        _client = genai.Client(api_key=settings.api_key)
+    return _client
 
 MODULE_NAME = "error_handling"
 ITEM_ID = 15
@@ -49,7 +58,9 @@ def _load_prompt() -> dict:
 _PROMPT: dict = _load_prompt()
 
 
-async def _verify_one(model, sem: asyncio.Semaphore, idx: int, row: dict) -> dict:
+async def _verify_one(client, sem: asyncio.Semaphore, idx: int, row: dict) -> dict:
+    from google.genai import types
+
     matched = ", ".join(f"'{h['matched']}'" for h in row["hits"][:5])
     verify = _PROMPT["verify"]
     prompt = (
@@ -60,8 +71,13 @@ async def _verify_one(model, sem: asyncio.Semaphore, idx: int, row: dict) -> dic
     )
     async with sem:
         try:
-            resp = await asyncio.to_thread(
-                model.generate_content, [verify["system"], prompt]
+            resp = await client.aio.models.generate_content(
+                model=_LLM_MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=_LLM_TEMPERATURE,
+                    system_instruction=verify["system"],
+                ),
             )
             raw = resp.text.strip()
             m = re.search(r"\{.*\}", raw, re.DOTALL)
@@ -91,13 +107,18 @@ def _make_abc_prompt(criterion: str, row: dict) -> str:
     return f"{crit['system']}\n\n{user}"
 
 
-async def _eval_criterion(model, criterion: str, row: dict) -> dict:
+async def _eval_criterion(client, criterion: str, row: dict) -> dict:
+    from google.genai import types
+
     prompt = _make_abc_prompt(criterion, row)
     try:
-        resp = await asyncio.to_thread(
-            model.generate_content,
-            prompt,
-            generation_config=genai.GenerationConfig(response_mime_type="application/json"),
+        resp = await client.aio.models.generate_content(
+            model=_LLM_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=_LLM_TEMPERATURE,
+                response_mime_type="application/json",
+            ),
         )
         parsed = json.loads(resp.text)
         return {"result": parsed.get("result"), "evidence": parsed.get("evidence")}
@@ -105,12 +126,12 @@ async def _eval_criterion(model, criterion: str, row: dict) -> dict:
         return {"result": None, "evidence": str(e)}
 
 
-async def _eval_abc_one(model, sem: asyncio.Semaphore, idx: int, row: dict) -> dict:
+async def _eval_abc_one(client, sem: asyncio.Semaphore, idx: int, row: dict) -> dict:
     async with sem:
         a, b, c = await asyncio.gather(
-            _eval_criterion(model, "A", row),
-            _eval_criterion(model, "B", row),
-            _eval_criterion(model, "C", row),
+            _eval_criterion(client, "A", row),
+            _eval_criterion(client, "B", row),
+            _eval_criterion(client, "C", row),
         )
     return {
         "idx": idx,
@@ -160,15 +181,12 @@ async def run(
     practice: list[dict] = preprocessed["practice"]
     candidates: list[dict] = preprocessed["candidates"]
 
-    model = genai.GenerativeModel(
-        _LLM_MODEL,
-        generation_config=genai.GenerationConfig(temperature=_LLM_TEMPERATURE),
-    )
+    client = _get_client()
     sem = asyncio.Semaphore(concurrency)
 
     # ── Step 2: Gemini yes/no ──────────────────────────────────
     verify_results = await asyncio.gather(
-        *[_verify_one(model, sem, i, row) for i, row in enumerate(candidates)]
+        *[_verify_one(client, sem, i, row) for i, row in enumerate(candidates)]
     )
     verify_map = {r["idx"]: r for r in verify_results}
 
@@ -182,7 +200,7 @@ async def run(
 
     # ── Step 3: Gemini A/B/C ──────────────────────────────────
     abc_results = await asyncio.gather(
-        *[_eval_abc_one(model, sem, i, row) for i, row in enumerate(true_rows)]
+        *[_eval_abc_one(client, sem, i, row) for i, row in enumerate(true_rows)]
     )
     abc_map = {r["idx"]: r for r in abc_results}
 

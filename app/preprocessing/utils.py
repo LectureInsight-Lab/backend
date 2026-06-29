@@ -19,14 +19,22 @@ import pandas as pd
 from loguru import logger
 from tqdm.auto import tqdm
 
-import google.generativeai as genai
-
 from app.core.config import settings
-
-genai.configure(api_key=settings.api_key)
 
 _LLM_MODEL = settings.llm_model
 _LLM_TEMPERATURE = settings.llm_temperature
+
+# Gemini 신 SDK 클라이언트 (지연 초기화 — 키 없는 환경의 import 안전)
+_client = None
+
+
+def _get_client():
+    global _client
+    if _client is None:
+        from google import genai
+
+        _client = genai.Client(api_key=settings.api_key)
+    return _client
 
 
 LINE_RE = re.compile(r"^<(\d{2}:\d{2}:\d{2})>\s+(\S+):\s*(.*)$")
@@ -356,14 +364,19 @@ def _make_prompt(anchor_text: str, chunk_text: str) -> str:
 
 
 async def _classify_one(
-    model, semaphore: asyncio.Semaphore, pbar, idx: int, row: pd.Series
+    client, semaphore: asyncio.Semaphore, pbar, idx: int, row: pd.Series
 ) -> dict:
+    from google.genai import types
+
     async with semaphore:
         try:
-            response = await asyncio.to_thread(
-                model.generate_content,
-                _make_prompt(row["anchor_text"], row["text"]),
-                generation_config=genai.GenerationConfig(response_mime_type="application/json"),
+            response = await client.aio.models.generate_content(
+                model=_LLM_MODEL,
+                contents=_make_prompt(row["anchor_text"], row["text"]),
+                config=types.GenerateContentConfig(
+                    temperature=_LLM_TEMPERATURE,
+                    response_mime_type="application/json",
+                ),
             )
             result = json.loads(response.text)
         except Exception as e:
@@ -382,13 +395,10 @@ async def _run_classification(chunks_df: pd.DataFrame, concurrency: int = 15) ->
         f"[label] Gemini 라벨링 시작 — 청크 {len(chunks_df)}개, model={_LLM_MODEL}, "
         f"concurrency={concurrency}"
     )
-    model = genai.GenerativeModel(
-        _LLM_MODEL,
-        generation_config=genai.GenerationConfig(temperature=_LLM_TEMPERATURE),
-    )
+    client = _get_client()
     semaphore = asyncio.Semaphore(concurrency)
     pbar = tqdm(total=len(chunks_df), desc="Gemini 라벨링 중")
-    tasks = [_classify_one(model, semaphore, pbar, idx, row) for idx, row in chunks_df.iterrows()]
+    tasks = [_classify_one(client, semaphore, pbar, idx, row) for idx, row in chunks_df.iterrows()]
     results = await asyncio.gather(*tasks)
     pbar.close()
 

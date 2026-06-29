@@ -76,7 +76,26 @@ def _run_item07(txt_path: Path) -> dict:
 # (결과 키, 모듈, 입력 종류, 출력 종류)
 #   입력 종류: "kss" | "labeled" | "sentences"(Kiwi 문장화, 항목 2·3)
 #   출력 종류: "score" | "chunk"
+#   각 callable 은 (df) 또는 (df, concurrency=...) 시그니처. item07 만 (date, txt) 라 _run_item07 로 래핑.
 _ITEMS: list[tuple[str, object, str, str]] = [
+    ("repetition",          item01_repetition.score_repetition,        "txt_path",  "score"),  # 1
+    ("completeness",        item02_completeness.run,                   "sentences", "score"),  # 2
+    ("consistency",         item03_consistency.run,                    "sentences", "score"),  # 3
+    ("learning_objectives", item04_learning_objectives.run,            "kss",       "score"),  # 4
+    ("review_linkage",      item05_review_linkage.run,                 "kss",       "score"),  # 5
+    ("sequence_violation",  item06_sequence_violation.run,             "labeled",   "score"),  # 6
+    ("emphasis",            _run_item07,                               "txt_path",  "score"),  # 7
+    ("summary",             item08_summary.run,                        "kss",       "score"),  # 8
+    ("concept_definition",  item09_concept_definition.run,             "labeled",   "score"),  # 9
+    ("example_coverage",    item10_example_coverage.run,               "labeled",   "score"),  # 10
+    ("prerequisite",        item11_prerequisite.score_prerequisite,    "txt_path",  "score"),  # 11
+    ("pace",                item12_pace.run,                           "kss",       "score"),  # 12
+    ("example_relevance",   item13_example_relevance.run,              "labeled",   "score"),  # 13
+    ("practice_link",       item14_practice_link.run,                  "labeled",   "score"),  # 14
+    ("error_handling",      item15_error_handling.run,                 "labeled",   "score"),  # 15
+    ("comprehension",       item16_comprehension_check.run,            "kss",       "score"),  # 16
+    ("engagement",          item17_engagement.run,                     "kss",       "score"),  # 17
+    ("question",            item18_question.run,                       "kss",       "score"),  # 18
     ("repetition",          item01_repetition.score_repetition,            "txt",     "score"),
     ("question",            question.run,                                  "kss",     "chunk"),
     ("summary",             summary.run,                                   "kss",     "chunk"),
@@ -162,6 +181,14 @@ def run(
     sentences = sentencizer.build_sentences(build_utterances(kss_df))
     logger.info(f"[pipeline] Kiwi 문장화 완료 — {len(sentences)} 문장 (항목 2·3용)")
 
+    # ── 전체 항목 실행 + 병합 (항목 1→18 순차) ──────────────────
+    inputs = {
+        "kss": kss_df,
+        "labeled": labeled_df,
+        "sentences": sentences,   # 항목 2·3
+        "txt_path": txt_path,     # 항목 1·7·11 (원본 STT 직접 파싱)
+    }
+    logger.info(f"[pipeline] 3/3 평가 항목 {len(_ITEMS)}개 순차 실행…")
     # ── 전체 항목 실행 + 병합 ────────────────────────────────────
     # txt_path: 원본 STT 파일을 직접 파싱하는 항목(1·7·11)용 공유 입력.
     inputs = {"kss": kss_df, "labeled": labeled_df, "sentences": sentences, "txt_path": txt_path}
@@ -195,22 +222,26 @@ def run(
 
 
 # ── 라우트 진입점: raw_text → InstructorScorecard ────────────────────────────
-# pipeline.run() 결과 dict 의 항목 키 → 체크리스트 항목 id 매핑.
-# (현재 동작 검증된 9개 항목. 나머지 9개는 프롬프트 라이브러리 완성 후 추가 — TODO)
+# pipeline.run() 결과 dict 의 항목 키 → 체크리스트 항목 id 매핑 (18개 전부).
 _KEY_TO_ID: dict[str, int] = {
+    "repetition": 1,
+    "completeness": 2,
+    "consistency": 3,
     "learning_objectives": 4,
     "review_linkage": 5,
     "sequence_violation": 6,
+    "emphasis": 7,
     "summary": 8,
     "concept_definition": 9,
     "example_coverage": 10,
-    "example_relevance": 13,
-    "error_handling": 15,
-    "question": 18,
-    "practice_link": 14,
+    "prerequisite": 11,
     "pace": 12,
+    "example_relevance": 13,
+    "practice_link": 14,
+    "error_handling": 15,
     "comprehension": 16,
     "engagement": 17,
+    "question": 18,
     "completeness": 2,
     "consistency": 3,
     "repetition": 1,
@@ -351,6 +382,10 @@ async def _run_all(
     # 항목 id 오름차순 정렬 (1, 2, 3, … 18)
     ordered = sorted(_ITEMS, key=lambda it: _KEY_TO_ID.get(it[0], 999))
     total = len(ordered)
+
+    details: dict = {}
+    chunk: dict = {}
+    for idx, (key, run_fn, src, out) in enumerate(ordered, start=1):
     total = len(_ITEMS)
     completed = 0
 
@@ -380,6 +415,7 @@ async def _run_all(
         item_id = _KEY_TO_ID.get(key, "?")
         logger.info(f"[pipeline]   ▷ ({idx}/{total}) item{item_id} [{key}] 채점 시작 (입력 {n} 행)")
         try:
+            res = await _run_item(run_fn, df, concurrency)
             res = await _run_item(module.run, df, concurrency)
         except Exception as e:  # noqa: BLE001 — 한 항목 실패가 전체를 막지 않도록
             logger.error(f"[pipeline]   ✗ item{item_id} [{key}] 실패 — {type(e).__name__}: {e}")
