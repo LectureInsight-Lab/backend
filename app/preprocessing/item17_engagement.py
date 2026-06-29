@@ -171,6 +171,18 @@ def final_score(count: int, avg_gap_seconds: float, feedback_count: int) -> int:
 
 
 # ── 종합 ──────────────────────────────────────────────────────
+def run(df) -> dict:
+    """kss DataFrame → 참여 유도 점수 (항목 17). 파이프라인 레지스트리 진입점."""
+    from app.preprocessing.utils import build_utterances
+
+    p = engagement_profile(build_utterances(df))
+    reason = (
+        f"참여 유도 발화 {p['engagement_count']}회"
+        f" (평균 대기 {p['avg_gap']:.0f}초, 피드백 {p['feedback_count']}회)"
+    )
+    return {"final_score": p["final_score"], "reason": reason, "evidence": None}
+
+
 def engagement_profile(utterances: list[Utterance]) -> dict:
     """항목 17 종합. 원지표 + 점수 + 행동 신호(진짜 넘김) 함께 노출."""
     hits = detect_engagements(utterances)

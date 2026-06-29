@@ -16,6 +16,7 @@ from pathlib import Path
 
 import kss
 import pandas as pd
+from loguru import logger
 from tqdm.auto import tqdm
 
 import google.generativeai as genai
@@ -74,7 +75,13 @@ def parse_and_split(txt_path: str | Path) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame(columns=["lecture_id", "date", "timestamp", "speaker_id", "text_raw"])
 
+    total_chars = sum(len(r["text_raw"]) for r in rows)
+    logger.info(
+        f"[parse] 발화 {len(rows)}줄 파싱 완료 ({total_chars:,}자) → KSS 문장 분리 시작 "
+        "(mecab 미설치 시 pecab 백엔드라 시간 소요될 수 있음)"
+    )
     df = pd.DataFrame(_split_with_timestamps(pd.DataFrame(rows)))
+    logger.info(f"[parse] KSS 문장 분리 완료 — {len(df)}문장 → 타임라인 컬럼 계산")
     df = add_timeline_columns(df)
 
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
@@ -360,13 +367,21 @@ async def _classify_one(
             )
             result = json.loads(response.text)
         except Exception as e:
+            logger.warning(f"[label] 청크 #{idx} 분류 실패 — {type(e).__name__}: {e}")
             result = {"label": "ERROR", "reason": str(e), "key_sentence": None}
         finally:
             pbar.update(1)
+            step = max(1, (pbar.total or 1) // 10)
+            if pbar.n % step == 0 or pbar.n == pbar.total:
+                logger.info(f"[label] Gemini 라벨링 진행 {pbar.n}/{pbar.total}")
         return {"idx": idx, **result}
 
 
 async def _run_classification(chunks_df: pd.DataFrame, concurrency: int = 15) -> pd.DataFrame:
+    logger.info(
+        f"[label] Gemini 라벨링 시작 — 청크 {len(chunks_df)}개, model={_LLM_MODEL}, "
+        f"concurrency={concurrency}"
+    )
     model = genai.GenerativeModel(
         _LLM_MODEL,
         generation_config=genai.GenerationConfig(temperature=_LLM_TEMPERATURE),
@@ -426,6 +441,8 @@ async def _label(df: pd.DataFrame, concurrency: int = 15) -> pd.DataFrame:
     df = df.sort_values(["file", "dt"]).reset_index(drop=True)
 
     df["labels"] = df["text"].apply(_detect_labels)
+    n_anchors = int((df["labels"].apply(lambda l: l != ["기타"])).sum())
+    logger.info(f"[label] 발화 {len(df)}개 중 키워드 앵커 {n_anchors}개 탐지 → 청크 병합")
 
     chunks_df = _make_anchored_chunks(df)
     chunks_df = await _run_classification(chunks_df, concurrency)
@@ -434,6 +451,29 @@ async def _label(df: pd.DataFrame, concurrency: int = 15) -> pd.DataFrame:
 
 # ── 항목 모듈 공통 유틸 (세그먼트/문장ID/키워드/컨텍스트/루브릭) ──────────────────
 #   모두 pandas 기반 순수 함수. 항목 4·5(전처리)·9(분석)에서 사용.
+
+def build_utterances(df: pd.DataFrame) -> list:
+    """kss DataFrame → ``list[Utterance]`` (타이밍 포함).
+
+    item 12·16·17 등 ``list[Utterance]`` 기반 채점 함수의 입력 어댑터.
+    seconds_from_start 는 elapsed_sec(없거나 NaN 이면 0)를 사용한다.
+    """
+    from app.analysis.schemas import Utterance  # 지연 import (순환 방지)
+
+    utts = []
+    for _, row in df.iterrows():
+        sec = row.get("elapsed_sec", 0)
+        sec = 0 if pd.isna(sec) else int(sec)
+        utts.append(
+            Utterance(
+                timestamp=str(row.get("timestamp", "")),
+                speaker_id=str(row.get("speaker_id", "")),
+                text=str(row.get("text_raw", "")),
+                seconds_from_start=sec,
+            )
+        )
+    return utts
+
 
 def extract_intro_segment(utterances: pd.DataFrame, window_sec: int = 1800) -> pd.DataFrame:
     """elapsed_sec <= window_sec 인 발화만 반환한다. 기본 1800s = 30분."""
