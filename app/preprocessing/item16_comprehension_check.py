@@ -263,6 +263,18 @@ def final_score(rate: float, ratio: float | None) -> int:
 
 
 # ── 4) 종합 ───────────────────────────────────────────────────
+def run(df) -> dict:
+    """kss DataFrame → 이해 확인 질문 점수 (항목 16). 파이프라인 레지스트리 진입점."""
+    from app.preprocessing.utils import build_utterances
+
+    p = comprehension_profile(build_utterances(df), use_proxy_anchors=True)
+    reason = (
+        f"이해 확인 표현 {p['check_count']}회"
+        f" (분당 {p['check_rate']:.2f}회)"
+    )
+    return {"final_score": p["final_score"], "reason": reason, "evidence": None}
+
+
 def comprehension_profile(
     utterances: list[Utterance],
     anchor_seconds: list[int] | None = None,

@@ -43,6 +43,22 @@ _FORMAL_SUFFIX = ("니다", "니까", "시오")  # 합쇼체/하십시오체 (�
 _DECLARATIVE_SUFFIX = ("다",)          # 한다체 평서 (중립) — 한다/된다/것이다/싶다
 
 
+def run(sentences) -> dict:
+    """list[Sentence] (sentencizer 산출) → 언어 일관성 점수 (항목 3).
+
+    파이프라인 레지스트리 진입점. 입력은 공유 'sentences'(항목 2와 동일).
+    """
+    p = formality_profile(sentences)
+    return {
+        "final_score": p["consistency_score"],
+        "reason": (
+            f"말투 일관성 {p['consistency_ratio']:.0f}%"
+            f" (지배 말투 외 {p['violation_count']}문장 혼용)"
+        ),
+        "evidence": None,
+    }
+
+
 def classify_formality(ending_morph: str | None, ending_tag: str | None) -> str:
     """문장 마지막 EF 형태소 표면형 → 말투 라벨.
 

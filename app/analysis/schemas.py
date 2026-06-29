@@ -159,6 +159,7 @@ class ItemScore(BaseModel):
     bow_score: float
     final_confidence: float
     evidence: str
+    reason: str = ""             # 점수 근거 해설 (왜 이 점수인지) — 항목표 '해설' 칸용
     strengths: str
     improvements: str
     needs_human_review: bool = False    # confidence < threshold 시 True
