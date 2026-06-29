@@ -75,52 +75,26 @@ def _run_item07(txt_path: Path) -> dict:
 # (결과 키, 모듈, 입력 종류, 출력 종류)
 #   입력 종류: "kss" | "labeled" | "sentences"(Kiwi 문장화, 항목 2·3)
 #   출력 종류: "score" | "chunk"
+#   각 callable 은 (df) 또는 (df, concurrency=...) 시그니처. item07 만 (date, txt) 라 _run_item07 로 래핑.
 _ITEMS: list[tuple[str, object, str, str]] = [
-    ("repetition",          item01_repetition.score_repetition,            "txt",     "score"),
-    ("question",            question.run,                                  "kss",     "chunk"),
-    ("summary",             summary.run,                                   "kss",     "chunk"),
-    ("error_handling",      error_handling.run,                            "labeled", "score"),
-    ("sequence_violation",  sequence_violation.run,                        "labeled", "score"),
-    ("learning_objectives", item04_learning_objectives.run,                "kss",     "score"),
-    ("review_linkage",      item05_review_linkage.run,                     "kss",     "score"),
-    ("keyword_emphasis",    _run_item07,                                   "txt",     "score"),
-    ("concept_definition",  item09_concept_definition.run,                 "labeled", "score"),
-    ("example_coverage",    item10_example_coverage.run,                   "labeled", "score"),
-    ("prerequisite",        item11_prerequisite.score_prerequisite,        "txt",     "score"),
-    ("example_relevance",   item13_example_relevance.run,                  "labeled", "score"),
-    ("practice_link",       item14_practice_link.score_practice_link,      "labeled", "score"),
-    # TODO: 나머지 5개 항목 추가
-    # item04
-    ("learning_objectives", item04_learning_objectives, "kss",     "score"),
-    # item05
-    ("review_linkage",      item05_review_linkage,      "kss",     "score"),
-    # item06 — analysis 모듈이 내부에서 preprocessing 호출
-    ("sequence_violation",  item06_sequence_violation,  "labeled", "score"),
-    # item08 — preprocessing → Gemini 채점: 마무리 요약 충실도
-    ("summary",             item08_summary,             "kss",     "score"),
-    # item09
-    ("concept_definition",  item09_concept_definition,  "labeled", "score"),
-    # item10
-    ("example_coverage",    item10_example_coverage,    "labeled", "score"),
-    # item13
-    ("example_relevance",   item13_example_relevance,   "labeled", "score"),
-    # item15 — analysis 모듈이 내부에서 preprocessing 호출
-    ("error_handling",      item15_error_handling,      "labeled", "score"),
-    # item18 — preprocessing → Gemini 채점: 질문 응답 충분성
-    ("question",            item18_question,            "kss",     "score"),
-    # item14 — analysis 모듈, labeled 청크로 이론↔실습 LLM 비교 채점
-    ("practice_link",       item14_practice_link,       "labeled", "score"),
-    # item12 — preprocessing, 발화 속도(분당 음절) 규칙 채점
-    ("pace",                item12_pace,                "kss",     "score"),
-    # item16 — preprocessing, 이해 확인 질문 빈도/타이밍 규칙 채점
-    ("comprehension",       item16_comprehension_check, "kss",     "score"),
-    # item17 — preprocessing, 참여 유도 빈도/대기/피드백 규칙 채점
-    ("engagement",          item17_engagement,          "kss",       "score"),
-    # item02 — Kiwi 문장화 → 완결 문장 비율(EF 종결) 규칙 채점
-    ("completeness",        item02_completeness,        "sentences", "score"),
-    # item03 — Kiwi 문장화 → 말투 일관성(존/반/중립) 규칙 채점
-    ("consistency",         item03_consistency,         "sentences", "score"),
-    # TODO: 나머지 항목(01·07·11) 추가
+    ("repetition",          item01_repetition.score_repetition,        "txt_path",  "score"),  # 1
+    ("completeness",        item02_completeness.run,                   "sentences", "score"),  # 2
+    ("consistency",         item03_consistency.run,                    "sentences", "score"),  # 3
+    ("learning_objectives", item04_learning_objectives.run,            "kss",       "score"),  # 4
+    ("review_linkage",      item05_review_linkage.run,                 "kss",       "score"),  # 5
+    ("sequence_violation",  item06_sequence_violation.run,             "labeled",   "score"),  # 6
+    ("emphasis",            _run_item07,                               "txt_path",  "score"),  # 7
+    ("summary",             item08_summary.run,                        "kss",       "score"),  # 8
+    ("concept_definition",  item09_concept_definition.run,             "labeled",   "score"),  # 9
+    ("example_coverage",    item10_example_coverage.run,               "labeled",   "score"),  # 10
+    ("prerequisite",        item11_prerequisite.score_prerequisite,    "txt_path",  "score"),  # 11
+    ("pace",                item12_pace.run,                           "kss",       "score"),  # 12
+    ("example_relevance",   item13_example_relevance.run,              "labeled",   "score"),  # 13
+    ("practice_link",       item14_practice_link.run,                  "labeled",   "score"),  # 14
+    ("error_handling",      item15_error_handling.run,                 "labeled",   "score"),  # 15
+    ("comprehension",       item16_comprehension_check.run,            "kss",       "score"),  # 16
+    ("engagement",          item17_engagement.run,                     "kss",       "score"),  # 17
+    ("question",            item18_question.run,                       "kss",       "score"),  # 18
 ]
 
 
@@ -156,13 +130,14 @@ def run(
     sentences = sentencizer.build_sentences(build_utterances(kss_df))
     logger.info(f"[pipeline] Kiwi 문장화 완료 — {len(sentences)} 문장 (항목 2·3용)")
 
-    # ── 전체 항목 실행 + 병합 ────────────────────────────────────
-    inputs = {"kss": kss_df, "labeled": labeled_df, "txt": txt_path}
-    final_score, chunk = asyncio.run(_run_all(inputs, concurrency))
-    inputs = {"kss": kss_df, "labeled": labeled_df}
-    details, chunk = asyncio.run(_run_all(inputs, concurrency))
-    inputs = {"kss": kss_df, "labeled": labeled_df, "sentences": sentences}
-    logger.info(f"[pipeline] 3/3 평가 항목 {len(_ITEMS)}개 병렬 실행…")
+    # ── 전체 항목 실행 + 병합 (항목 1→18 순차) ──────────────────
+    inputs = {
+        "kss": kss_df,
+        "labeled": labeled_df,
+        "sentences": sentences,   # 항목 2·3
+        "txt_path": txt_path,     # 항목 1·7·11 (원본 STT 직접 파싱)
+    }
+    logger.info(f"[pipeline] 3/3 평가 항목 {len(_ITEMS)}개 순차 실행…")
     progress.items(len(_ITEMS))
     progress.stage(f"평가 항목 {len(_ITEMS)}개 분석 중…", 16)
     details, chunk = asyncio.run(_run_all(inputs, concurrency, progress))
@@ -187,24 +162,26 @@ def run(
 
 
 # ── 라우트 진입점: raw_text → InstructorScorecard ────────────────────────────
-# pipeline.run() 결과 dict 의 항목 키 → 체크리스트 항목 id 매핑.
-# (현재 동작 검증된 9개 항목. 나머지 9개는 프롬프트 라이브러리 완성 후 추가 — TODO)
+# pipeline.run() 결과 dict 의 항목 키 → 체크리스트 항목 id 매핑 (18개 전부).
 _KEY_TO_ID: dict[str, int] = {
+    "repetition": 1,
+    "completeness": 2,
+    "consistency": 3,
     "learning_objectives": 4,
     "review_linkage": 5,
     "sequence_violation": 6,
+    "emphasis": 7,
     "summary": 8,
     "concept_definition": 9,
     "example_coverage": 10,
-    "example_relevance": 13,
-    "error_handling": 15,
-    "question": 18,
-    "practice_link": 14,
+    "prerequisite": 11,
     "pace": 12,
+    "example_relevance": 13,
+    "practice_link": 14,
+    "error_handling": 15,
     "comprehension": 16,
     "engagement": 17,
-    "completeness": 2,
-    "consistency": 3,
+    "question": 18,
 }
 
 
@@ -329,38 +306,33 @@ async def analyze_raw_text(
 async def _run_all(
     inputs: dict[str, pd.DataFrame], concurrency: int, progress: ProgressSink = NULL_SINK
 ) -> tuple[dict, dict]:
-    """레지스트리의 모든 항목을 실행하고 출력 종류별로 두 섹션으로 나눈다.
+    """레지스트리의 모든 항목을 **항목 id 1→18 순서로 순차 실행**하고 출력 종류별로 나눈다.
+
+    항목 간 병렬(asyncio.gather)을 쓰지 않는다 — Gemini rate limit/순서 보장을 위해
+    한 항목이 끝나야 다음 항목을 시작한다. (각 항목 내부의 chunk 동시 처리는 그대로)
 
     Returns:
         (details 섹션, chunk 섹션)
     """
-    total = len(_ITEMS)
-    completed = 0
-
-    async def _logged(key: str, run_fn, df: pd.DataFrame):
-        nonlocal completed
-        logger.info(f"[pipeline]   ▷ [{key}] 채점 시작 (입력 {len(df)} 행)")
-        res = await _run_item(run_fn, df, concurrency)
-        completed += 1
-        score = res.get("final_score") if isinstance(res, dict) else None
-        logger.info(f"[pipeline]   ◁ [{key}] 채점 완료 — final_score={score}")
-        progress.item_done(key, score, completed, total)
-        return res
-
-    tasks = [
-        _run_item(run_fn, inputs[src], concurrency)
-        for _, run_fn, src, _ in _ITEMS
-        _logged(key, module.run, inputs[src])
-        for key, module, src, _ in _ITEMS
-    ]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    # 항목 id 오름차순 정렬 (1, 2, 3, … 18)
+    ordered = sorted(_ITEMS, key=lambda it: _KEY_TO_ID.get(it[0], 999))
+    total = len(ordered)
 
     details: dict = {}
     chunk: dict = {}
-    for (key, _, _, out), res in zip(_ITEMS, results):
-        if isinstance(res, Exception):
-            logger.error(f"[pipeline]   ✗ [{key}] 실패 — {type(res).__name__}: {res}")
-            res = {"error": f"{type(res).__name__}: {res}"}
+    for idx, (key, run_fn, src, out) in enumerate(ordered, start=1):
+        df = inputs[src]
+        n = len(df) if hasattr(df, "__len__") else "txt"  # txt_path 입력은 len() 없음
+        item_id = _KEY_TO_ID.get(key, "?")
+        logger.info(f"[pipeline]   ▷ ({idx}/{total}) item{item_id} [{key}] 채점 시작 (입력 {n} 행)")
+        try:
+            res = await _run_item(run_fn, df, concurrency)
+        except Exception as e:  # noqa: BLE001 — 한 항목 실패가 전체를 막지 않도록
+            logger.error(f"[pipeline]   ✗ item{item_id} [{key}] 실패 — {type(e).__name__}: {e}")
+            res = {"error": f"{type(e).__name__}: {e}"}
+        score = res.get("final_score") if isinstance(res, dict) else None
+        logger.info(f"[pipeline]   ◁ ({idx}/{total}) item{item_id} [{key}] 완료 — final_score={score}")
+        progress.item_done(key, score, idx, total)
         (details if out == "score" else chunk)[key] = res
     return details, chunk
 
