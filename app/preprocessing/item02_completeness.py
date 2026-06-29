@@ -14,6 +14,19 @@ from app.analysis.schemas import Sentence
 
 
 # ── 항목 2 지표 씨앗: 완결 문장 비율 ──────────────────────────
+def run(sentences: list[Sentence]) -> dict:
+    """list[Sentence] (sentencizer 산출) → 발화 완결성 점수 (항목 2).
+
+    파이프라인 레지스트리 진입점. 입력은 공유 'sentences'(Kiwi 분리+EF/EC 판정).
+    """
+    rate = completeness_rate(sentences)
+    return {
+        "final_score": completeness_score(rate),
+        "reason": f"완결 문장 비율 {rate:.0f}% (마지막 형태소가 종결어미인 문장 기준)",
+        "evidence": None,
+    }
+
+
 def completeness_rate(sentences: list[Sentence]) -> float:
     """완결 문장 비율(%) — 항목 2(발화 완결성) 지표의 씨앗.
 

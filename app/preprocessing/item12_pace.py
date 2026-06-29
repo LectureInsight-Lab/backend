@@ -163,6 +163,18 @@ def score_band(spm: float, slowdown: float | None = None) -> int:
 
 
 # ── 종합 ──────────────────────────────────────────────────────
+def run(df) -> dict:
+    """kss DataFrame → 발화 속도 점수 (항목 12). 파이프라인 레지스트리 진입점."""
+    from app.preprocessing.utils import build_utterances
+
+    p = pace_profile(build_utterances(df))
+    reason = (
+        f"발화 속도 분당 {p['spm_speaking']:.0f}음절"
+        f" (아나운서 대비 {p['pct_of_announcer']:.0f}%)"
+    )
+    return {"final_score": p["score"], "reason": reason, "evidence": None}
+
+
 def pace_profile(utterances: list[Utterance]) -> dict:
     """발화 속도 종합. 점수는 score_band 로 산출(원지표 + 점수 함께 노출).
 

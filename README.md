@@ -105,25 +105,69 @@ backend/
 └── .env.example
 ```
 
-## Setup
+## Setup — 조원용 실행 가이드
+
+> 권장: **conda 전용 환경**. `mecab`·`sentence-transformers` 는 **선택**(없어도 동작, 자동 폴백/스킵).
+> 필수 준비물: Gemini API 키(`.env` 의 `API_KEY`).
+
+### 1. 백엔드 실행
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
-cp .env.example .env                  # API_KEY (Gemini) 입력
-cp configs/paths.example.yaml configs/paths.yaml   # 외부 STT 경로 지정
+# 1) conda 전용 환경 (base 오염 방지)
+conda create -n lectureinsight python=3.11 -y
+conda activate lectureinsight
 
-# API 서버
-set -a; source .env; set +a
-uvicorn app.main:app --reload --host "$APP_HOST" --port "$APP_PORT"
+# 2) 의존성 설치 (pyproject 기반, editable)
+cd backend
+pip install -e .                  # 기본 — KSS=pecab 폴백, item14(KR-SBERT) 자동 스킵
+# pip install -e ".[embeddings]"  # 선택 — item14 실습연계 채점까지(torch 동반, 무거움)
 
-# Streamlit 대시보드 (별도 터미널)
-streamlit run app/dashboard/app.py --server.port "$DASHBOARD_PORT"
+# 3) 환경 변수
+cp .env.example .env                               # API_KEY(Gemini) 입력
+cp configs/paths.example.yaml configs/paths.yaml   # (선택) 외부 STT 파일 경로
 
-# 또는: 파이프라인 CLI 단독 실행 (FastAPI 없이)
-python -m app.analysis.pipeline data/raw/2026-02-02_kdt-backendj-21th.txt
+# 4) 서버 실행
+uvicorn app.main:app --reload --port 8000 --no-access-log
+#   → http://localhost:8000/health 가 {"status":"ok"} 면 성공
+#   (--no-access-log: 프론트 폴링 GET 로그 도배 방지)
 ```
+
+### 2. (선택) KSS 문장분리 속도 — mecab
+
+긴 강의는 기본 백엔드 `pecab`(순수 파이썬)이 느립니다(분 단위). mecab을 깔면 초 단위로 빨라집니다.
+
+```bash
+brew install mecab-ko mecab-ko-dic        # 충돌 시: brew unlink mecab 후 재시도
+pip install mecab-python3
+# Apple Silicon konlpy/mecab 경로 문제 → env 에 MECABRC 박아두기
+conda env config vars set MECABRC=/opt/homebrew/etc/mecabrc -n lectureinsight
+conda deactivate && conda activate lectureinsight   # 재활성화로 적용
+```
+미설치 시 자동으로 pecab 폴백(동작은 정상, 느릴 뿐). **OS 의존이라 `pip install -e .` 만으론 재현 안 됨** — 머신마다 위 단계 필요.
+
+### 3. 프론트엔드 실행 (별도 터미널)
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local        # NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+npm run dev                       # → http://localhost:3000
+```
+
+### 4. CLI 단독 실행 (FastAPI 없이 파이프라인만)
+
+```bash
+python -m app.analysis.pipeline data/raw/2026-02-02_kdt-backendj-21th.txt -c 5
+```
+
+### 트러블슈팅
+
+| 증상 | 해결 |
+|---|---|
+| `ModuleNotFoundError: kss / google.generativeai` | `pip install -e .` 다시 |
+| `[Kss] … pecab as a backend` 경고 | 정상(느릴 뿐). 속도는 위 2번 mecab |
+| 분석 결과에 **item14(실습 연계)** 없음 | `sentence-transformers` 미설치(정상, 선택) → `pip install -e ".[embeddings]"` |
+| 종합 분석/해설이 비어 보임 | 백엔드 미기동 또는 Gemini 키 문제 — `/health` 와 `.env` 의 `API_KEY` 확인 |
 
 ## Architecture
 
@@ -273,9 +317,35 @@ InstructorScorecard {
    ↓ report_generator.generate → outputs/.../*.{html,docx}
 ```
 
+> **2026-06 추가**: `scorer.build_scorecard` 직후 `explainer.attach_explanations(card)` 가
+> 항목별 자연어 해설을 채운다. 강의 종합 분석은 별도 엔드포인트
+> `POST /api/v1/analysis/narrative` 로 생성한다(아래 참고).
+
+## 항목별 해설 · 종합 분석 (LLM, 2026-06)
+
+점수(structured)는 그대로 두고 그 위에 **표현 레이어(자연어)** 를 얹는다 — 감사·재현성 유지.
+
+### 항목별 해설 — `analysis/explainer.py`
+- `analyze_raw_text` 안에서 `build_scorecard` 직후 **Gemini 1회**로 전 항목을 한 번에 처리.
+- 항목 표 '해설' 칸 = **2줄 형식**:
+  - **1줄 (`reason`)**: 핵심 한 줄 코멘트 — 고득점=잘한 점 / 저득점=개선 방향.
+  - **2줄 (`evidence`, "근거")**: 지표·판정 근거 한 줄(긴 CoT는 자동 압축 — 표시 90자 / explainer 입력 240자 제한).
+- `strengths`/`improvements` 는 하단 '최종 피드백' 카드용. 어조는 추정형(완곡).
+- `ItemScore.reason` 필드 신설(1줄 코멘트).
+
+### 종합 분석 + 요약 — `analysis/narrative.py` + `POST /api/v1/analysis/narrative`
+- 흐름: (1) **종합 분석**(`overall_feedback`, 2~3단락) 생성 → (2) 그 **요약**(`summary`).
+- **톤 구분**: 단일 강의 = '이번 강의' / 입력 파일 종합(aggregate) = '이 강사 전반'.
+- 종합 뷰는 프론트(`buildAggregate`)가 계산 → 단일/종합 모두 이 엔드포인트를 **온디맨드** 호출.
+- 요청 `{ scorecard, is_aggregate, lecture_count }` → 응답 `{ overall_feedback, summary }`.
+
+### 채점 근거 grounding — `analysis/rubrics.py` + `configs/item_rubrics.yaml`
+- 18항목 세부 기준 + 고/저득점 의미를 explainer·narrative 프롬프트에 주입해 해설을 채점 기준에 정합.
+
 ## 18개 체크리스트 항목
 
 `configs/checklist.yaml` 의 메타와 실제 구현 상태를 함께 표기합니다.
+**현재 `pipeline._ITEMS` 에 15개 등록** (id 2·3·4·5·6·8·9·10·12·13·14·15·16·17·18). **미등록 3개: 1·7·11**(각 `run()` 어댑터 필요). item14 는 KR-SBERT 필요 → `[embeddings]` 미설치 시 런타임 자동 스킵.
 
 | ID | 항목 | 카테고리 | 유형 | preprocessing | analysis | 채점 방식 | 비고 |
 |---|---|---|---|---|---|---|---|
@@ -348,20 +418,6 @@ stt_filename_pattern: "{date}_{course_id}.txt"
 - DB 없음. `app/core/store.py` 가 `data/processed/scorecards/{instructor_id}/{lecture_date}.json` 로 InstructorScorecard 를 저장.
 - 강사 누적 조회·트렌드 회귀는 폴더 글로브 + 정렬로 수행 (`store.list_by_instructor`).
 - DB 도입은 데이터 규모/검색 요구가 커지는 시점의 후속 작업.
-
-## v2 초안과 현재의 차이 (히스토리)
-
-초기 v2 노션 설계는 RAG + BoW + Few-shot 앙상블이었으나, 실제 구현은 **항목별 모듈화 + 정량/LLM 단일 신호** 로 단순화되었습니다.
-
-| 영역 | 초안 (노션 PIPELINE) | 현재 구현 |
-|---|---|---|
-| 컨텍스트 | RAG 검색 (text-embedding-3-small + 코사인 top-K) | 항목별 직접 추출 (intro 30분 / 키워드 윈도우 / labeled 청크 / Q-A 페어) |
-| 신호원 | LLM 70% + BoW 30% 앙상블 | LLM 단독 또는 정량 단독 (항목별로 택1) |
-| Few-shot | 항목별 good/bad 예시 주입 | 미구현 (configs 잔존) |
-| LLM | OpenAI GPT-4o + LangChain | Google Gemini 직접 (google.generativeai) |
-| 문장 분리 | (지정 없음) | KSS (공유 입력) + Kiwi (sentencizer) — Mecab 에서 전환 |
-| 오케스트레이션 | `analyzer.py` + `ensemble.py` | `pipeline.py` 단일 진입점, 모듈 레지스트리 |
-| 영속화 | (미정) | `store.py` 파일 JSON |
 
 ### 정리 대상 (미사용/구식 파일)
 

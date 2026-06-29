@@ -26,30 +26,39 @@ import os
 from datetime import timedelta
 
 import pandas as pd
-from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from loguru import logger
 
 from app.analysis.embedder import cosine_sim, embed
 from app.analysis.templates import load_item_prompt
-
-load_dotenv()
-_CLIENT = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+from app.core.config import settings
 
 _LOOKBACK_MINUTES = 60
-_LLM_MODEL        = os.environ.get("LLM_MODEL", "gemini-2.5-flash")
 _PROMPT_PATH      = "app/analysis/prompts/items/14_practice_link.yaml"
 
 _EVAL_TEMPLATE: str = load_item_prompt(_PROMPT_PATH).get("eval_template", "")
+
+# Gemini 클라이언트 지연 초기화 (settings.api_key 사용, 키 없는 환경에서 import 실패 방지)
+_client = None
+
+
+def _get_client():
+    global _client
+    if _client is None:
+        api_key = settings.api_key or os.environ.get("GEMINI_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("API_KEY 가 비어 있습니다. .env 에 Gemini 키를 설정하세요.")
+        _client = genai.Client(api_key=api_key)
+    return _client
 
 
 def _llm_score(theory_text: str, practice_text: str) -> tuple[float, str, str]:
     """Gemini CoT 평가. 반환: (score, reason, cot). 실패 시 (3.0, 'LLM 오류', '')."""
     try:
         prompt = _EVAL_TEMPLATE.replace("{theory}", theory_text[:800]).replace("{practice}", practice_text[:800])
-        resp = _CLIENT.models.generate_content(
-            model=_LLM_MODEL,
+        resp = _get_client().models.generate_content(
+            model=settings.llm_model,
             contents=prompt,
             config=types.GenerateContentConfig(
                 temperature=0.1,
@@ -75,6 +84,14 @@ def _sim_to_base_score(sim: float) -> float:
     if sim >= 0.50:
         return 2.0
     return 1.0
+
+
+def run(df: pd.DataFrame) -> dict:
+    """labeled DataFrame → 실습 연계 점수 (항목 14). 파이프라인 레지스트리 진입점.
+
+    내부에서 실습/개념 청크를 LLM 으로 비교 채점한다. 반환: {final_score, reason, evidence}.
+    """
+    return score_practice_link(df)
 
 
 def score_practice_link(labeled: list[dict] | pd.DataFrame, mode: str = "") -> dict:
