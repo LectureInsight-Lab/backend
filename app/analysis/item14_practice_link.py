@@ -12,7 +12,7 @@
 
 채점 (설계 문서 기준):
   sim_score 기준: 5≥0.80 / 4=0.65-0.80 / 2=0.50-0.65 / 1<0.50
-  final = round(0.7 × sim_score + 0.3 × llm_score, 0.5단위)
+  final = round(0.5 × sim_score + 0.5 × llm_score, 0.5단위)
 
 출력:
   {"evidence": list[object] | null, "reason": str, "final_score": int | "N/A"}

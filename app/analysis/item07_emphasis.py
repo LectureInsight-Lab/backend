@@ -28,7 +28,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from app.preprocessing.keyword_pipeline import KEYWORDS_JSON, load_keywords
+from app.preprocessing.item07_keyword_pipeline import KEYWORDS_JSON, load_keywords
 
 ITEM_ID     = 7
 ITEM_NAME   = "핵심 강조"

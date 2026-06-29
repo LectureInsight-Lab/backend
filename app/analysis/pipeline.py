@@ -33,12 +33,15 @@ import pandas as pd
 from loguru import logger
 
 from app.analysis import (
+    item01_repetition,
     item04_learning_objectives,
     item05_review_linkage,
+    item07_emphasis,
     item06_sequence_violation,
     item08_summary,
     item09_concept_definition,
     item10_example_coverage,
+    item11_prerequisite,
     item13_example_relevance,
     item14_practice_link,
     item15_error_handling,
@@ -60,13 +63,33 @@ from app.preprocessing.utils import (
     parse_and_split,
 )
 
+# ── item07 래퍼: (date, txt_path) 시그니처를 (txt_path,) 로 통일 ──────────────
+def _run_item07(txt_path: Path) -> dict:
+    date = txt_path.stem.split("_")[0]
+    return item07_emphasis.score_keyword_emphasis(date, txt_path)
+
+
 # ── 18개 평가 항목 레지스트리 ─────────────────────────────────────────────────
+# (결과 키, callable, 입력 종류, 출력 종류)
+#   입력 종류: "kss" | "labeled" | "txt"
 # (결과 키, 모듈, 입력 종류, 출력 종류)
 #   입력 종류: "kss" | "labeled" | "sentences"(Kiwi 문장화, 항목 2·3)
 #   출력 종류: "score" | "chunk"
-#   항목 4·5·9·10·13: app.analysis.itemNN_* 모듈이 내부에서 preprocessing chunk emitter를
-#   호출해 LLM 채점까지 수행 → "score" 타입.
 _ITEMS: list[tuple[str, object, str, str]] = [
+    ("repetition",          item01_repetition.score_repetition,            "txt",     "score"),
+    ("question",            question.run,                                  "kss",     "chunk"),
+    ("summary",             summary.run,                                   "kss",     "chunk"),
+    ("error_handling",      error_handling.run,                            "labeled", "score"),
+    ("sequence_violation",  sequence_violation.run,                        "labeled", "score"),
+    ("learning_objectives", item04_learning_objectives.run,                "kss",     "score"),
+    ("review_linkage",      item05_review_linkage.run,                     "kss",     "score"),
+    ("keyword_emphasis",    _run_item07,                                   "txt",     "score"),
+    ("concept_definition",  item09_concept_definition.run,                 "labeled", "score"),
+    ("example_coverage",    item10_example_coverage.run,                   "labeled", "score"),
+    ("prerequisite",        item11_prerequisite.score_prerequisite,        "txt",     "score"),
+    ("example_relevance",   item13_example_relevance.run,                  "labeled", "score"),
+    ("practice_link",       item14_practice_link.score_practice_link,      "labeled", "score"),
+    # TODO: 나머지 5개 항목 추가
     # item04
     ("learning_objectives", item04_learning_objectives, "kss",     "score"),
     # item05
@@ -134,6 +157,10 @@ def run(
     logger.info(f"[pipeline] Kiwi 문장화 완료 — {len(sentences)} 문장 (항목 2·3용)")
 
     # ── 전체 항목 실행 + 병합 ────────────────────────────────────
+    inputs = {"kss": kss_df, "labeled": labeled_df, "txt": txt_path}
+    final_score, chunk = asyncio.run(_run_all(inputs, concurrency))
+    inputs = {"kss": kss_df, "labeled": labeled_df}
+    details, chunk = asyncio.run(_run_all(inputs, concurrency))
     inputs = {"kss": kss_df, "labeled": labeled_df, "sentences": sentences}
     logger.info(f"[pipeline] 3/3 평가 항목 {len(_ITEMS)}개 병렬 실행…")
     progress.items(len(_ITEMS))
@@ -321,6 +348,8 @@ async def _run_all(
         return res
 
     tasks = [
+        _run_item(run_fn, inputs[src], concurrency)
+        for _, run_fn, src, _ in _ITEMS
         _logged(key, module.run, inputs[src])
         for key, module, src, _ in _ITEMS
     ]
