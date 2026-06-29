@@ -43,14 +43,14 @@ def _parse_json(raw: str) -> dict:
 _model = None
 
 
-def _get_model():
+def _get_client():
     global _model
     if _model is None:
-        import google.generativeai as genai  # 지연 import
+        from google import genai  # 지연 import
+
         from app.core.config import settings
 
-        genai.configure(api_key=settings.api_key)
-        _model = genai.GenerativeModel(settings.llm_model)
+        _model = genai.Client(api_key=settings.api_key)
     return _model
 
 
@@ -60,18 +60,20 @@ async def judge(system: str, user: str, sem: asyncio.Semaphore) -> dict:
     ⚠️ Gemini thinking-token이 max_output_tokens를 잠식하므로 출력 토큰을 제한하지 않는다
     (memory: gemini-thinking-token-gotcha).
     """
-    import google.generativeai as genai  # 지연 import
+    from google.genai import types  # 지연 import
+
     from app.core.config import settings
 
-    model = _get_model()
-    cfg = genai.GenerationConfig(
+    cfg = types.GenerateContentConfig(
         temperature=settings.llm_temperature,
         response_mime_type="application/json",
     )
     contents = f"{system}\n\n{user}"
     async with sem:
         try:
-            resp = await asyncio.to_thread(model.generate_content, contents, generation_config=cfg)
+            resp = await _get_client().aio.models.generate_content(
+                model=settings.llm_model, contents=contents, config=cfg
+            )
             return _parse_json(resp.text)
         except Exception as e:  # noqa: BLE001
             return {"_error": str(e)}
