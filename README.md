@@ -160,15 +160,6 @@ npm run dev                       # → http://localhost:3000
 python -m app.analysis.pipeline data/raw/2026-02-02_kdt-backendj-21th.txt -c 5
 ```
 
-### 트러블슈팅
-
-| 증상 | 해결 |
-|---|---|
-| `ModuleNotFoundError: kss / google.generativeai` | `pip install -e .` 다시 |
-| `[Kss] … pecab as a backend` 경고 | 정상(느릴 뿐). 속도는 위 2번 mecab |
-| 분석 결과에 **item14(실습 연계)** 없음 | `sentence-transformers` 미설치(정상, 선택) → `pip install -e ".[embeddings]"` |
-| 종합 분석/해설이 비어 보임 | 백엔드 미기동 또는 Gemini 키 문제 — `/health` 와 `.env` 의 `API_KEY` 확인 |
-
 ## Architecture
 
 ### 책임 경계 — preprocessing vs analysis
