@@ -226,6 +226,11 @@ def _apply_penalty(score: int, win_max: float) -> int:
 
 # ── 공개 API ─────────────────────────────────────────────────────────────────
 
+def run(txt_path) -> dict:
+    """원본 STT txt 경로 → 불필요한 반복 표현 점수 (항목 1). 파이프라인 진입점."""
+    return score_repetition(txt_path)
+
+
 def score_repetition(txt_path: str | Path, mode: str = "") -> dict:
     """
     Parameters

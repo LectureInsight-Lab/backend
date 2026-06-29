@@ -82,6 +82,15 @@ _PREREQ_REFS = [
 ]
 
 
+def run(txt_path) -> dict:
+    """원본 STT txt 경로 → 선행 개념 확인 점수 (항목 11). 파이프라인 진입점.
+
+    내부에서 KR-SBERT(embedder)로 청크 유사도를 계산하므로 sentence-transformers
+    미설치 시 런타임 예외 → 파이프라인이 해당 항목만 안전하게 스킵한다.
+    """
+    return score_prerequisite(txt_path)
+
+
 def score_prerequisite(txt_path: str | Path, mode: str = "") -> dict:
     """
     Parameters
