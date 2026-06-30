@@ -1,0 +1,59 @@
+# Data & outputs (보안서약서: 실데이터 커밋 금지)
+data/raw/*
+data/processed/*
+data/metadata/*
+data/gold/*
+data/gold/_claude_ref/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/metadata/.gitkeep
+!data/gold/.gitkeep
+outputs/*
+!outputs/.gitkeep
+
+# Local config (경로 설정은 로컬 전용)
+configs/paths.yaml
+
+# Secrets
+.env
+.env.local
+*.key
+credentials.json
+
+# Local path config (로컬 절대경로 포함 — 커밋 금지, paths.example.yaml 참고)
+configs/paths.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# LLM 응답 캐시 (런타임 생성물 — 커밋 금지)
+.cache/

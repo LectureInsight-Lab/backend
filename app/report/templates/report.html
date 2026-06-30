@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>강의 분석 리포트 — {{ s.instructor_id }} ({{ s.lecture_date }})</title>
+  <style>
+    body { font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+           color: #1f2937; max-width: 960px; margin: 0 auto; padding: 32px; line-height: 1.6; }
+    h1 { font-size: 24px; border-bottom: 3px solid #2563eb; padding-bottom: 8px; }
+    h2 { font-size: 18px; margin-top: 32px; color: #1e40af; }
+    .meta { color: #6b7280; font-size: 14px; }
+    .overall { font-size: 40px; font-weight: 700; color: #2563eb; }
+    .grid { display: flex; gap: 24px; flex-wrap: wrap; align-items: center; }
+    .charts img { max-width: 100%; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; }
+    th { background: #f3f4f6; }
+    .review { color: #b91c1c; font-weight: 600; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; color: #fff; }
+    .discrete { background: #7c3aed; } .high_inference { background: #0891b2; }
+    .good { color: #16a34a; } .bad { color: #b91c1c; }
+    ul { margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <h1>강의 분석 리포트</h1>
+  <p class="meta">강사 <b>{{ s.instructor_id }}</b> · 강의일 <b>{{ s.lecture_date }}</b>
+     · 생성 {{ s.analyzed_at.strftime("%Y-%m-%d %H:%M") }}</p>
+
+  <h2>종합 점수</h2>
+  <div class="grid">
+    <div><span class="overall">{{ "%.2f"|format(s.overall_score) }}</span> <span class="meta">/ 5.0</span>
+      {% if s.trend_label %}<div class="meta">추이: {{ s.trend_label }} (slope {{ "%.3f"|format(s.trend_slope or 0) }})</div>{% endif %}
+    </div>
+    <div class="charts"><img src="data:image/png;base64,{{ radar_b64 }}" alt="radar"></div>
+  </div>
+
+  <h2>카테고리별 점수</h2>
+  <table>
+    <tr><th>카테고리</th><th>점수</th><th>가중치</th></tr>
+    {% for c in s.category_scores %}
+    <tr><td>{{ c.category }}</td><td>{{ "%.2f"|format(c.score) }}</td><td>{{ "%.0f"|format(c.weight * 100) }}%</td></tr>
+    {% endfor %}
+  </table>
+
+  <h2>강점 Top 3</h2>
+  <ul>{% for it in top_strengths %}<li class="good">{{ it.name }} — {{ "%.2f"|format(it.final_score) }}점 · {{ it.strengths }}</li>{% endfor %}</ul>
+
+  <h2>개선 우선 Top 3</h2>
+  <ul>{% for it in top_weaknesses %}<li class="bad">{{ it.name }} — {{ "%.2f"|format(it.final_score) }}점 · {{ it.improvements }}</li>{% endfor %}</ul>
+
+  {% if s.trend_points %}
+  <h2>점수 추이</h2>
+  <div class="charts"><img src="data:image/png;base64,{{ trend_b64 }}" alt="trend"></div>
+  {% endif %}
+
+  <h2>18개 항목 상세</h2>
+  <table>
+    <tr><th>ID</th><th>항목</th><th>카테고리</th><th>유형</th><th>점수</th><th>신뢰도</th><th>근거</th></tr>
+    {% for it in s.item_scores %}
+    <tr>
+      <td>{{ it.item_id }}</td>
+      <td>{{ it.name }}{% if it.needs_human_review %} <span class="review">⚠ 인간 검토 권장</span>{% endif %}</td>
+      <td>{{ it.category }}</td>
+      <td><span class="pill {{ it.item_type }}">{{ it.item_type }}</span></td>
+      <td>{{ "%.2f"|format(it.final_score) }}</td>
+      <td>{{ "%.2f"|format(it.final_confidence) }}</td>
+      <td>{{ it.evidence }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</body>
+</html>

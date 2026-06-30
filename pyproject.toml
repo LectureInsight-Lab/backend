@@ -1,0 +1,67 @@
+[project]
+name = "lectureinsight-backend"
+version = "0.2.0"
+description = "AI 강의 분석 리포트 생성기 - RAG + BoW 앙상블 백엔드 (v2)"
+requires-python = ">=3.11"
+dependencies = [
+    # Web / API
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.5.0",
+    "python-dotenv>=1.0.0",
+    # LLM (Gemini)
+    "google-genai>=1.0.0",       # Gemini API 클라이언트 (신 SDK, .env 의 API_KEY / models/gemini-*)
+    "google-generativeai>=0.8.0",  # 구 SDK — preprocessing/utils.py 가 아직 사용 (deprecated, 추후 신 SDK로 통일 필요)
+    "tenacity>=9.0.0",            # 재시도 (LLM 호출 안정화)
+    # NLP / Data
+    "numpy>=1.26.0",
+    "pandas>=2.2.0",
+    "scikit-learn>=1.5.0",        # 코사인 유사도, 선형 회귀
+    # Korean NLP
+    "konlpy>=0.6.0",
+    "nltk>=3.9.0",
+    "kiwipiepy>=0.17.0",          # Kiwi 형태소 분석 (항목 2·3 EF/EC 판정) — Mecab 대체 (2026-06-22)
+    "kss>=4.5,<5",                # KSS 문장 분리 (공유 입력 parse_and_split, backend="auto") — utils.py. 5.x는 API 변경되어 4.x 고정
+    # Visualization
+    "matplotlib>=3.9.0",
+    "plotly>=5.24.0",
+    # Reports
+    "jinja2>=3.1.0",
+    "python-docx>=1.1.0",
+    # Configs / Logs
+    "pyyaml>=6.0.0",
+    "loguru>=0.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.27.0",
+    "ruff>=0.7.0",
+    "mypy>=1.13.0",
+    "jupyter>=1.1.0",
+]
+# 선택: 항목 14(실습 연계)의 이론↔실습 KR-SBERT 코사인 유사도용.
+# torch 동반(무거움) + 최초 실행 시 KR-SBERT 모델 ~400MB 다운로드 → 기본 설치엔 미포함.
+# 설치: pip install -e ".[embeddings]"  (미설치 시 item14·item7 만 자동 스킵, 나머지 분석은 정상)
+embeddings = [
+    "sentence-transformers>=3.0",
+    "keybert>=0.8",            # item7 키워드 강조 — KeyBERT 날짜별 top-N 추출
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
