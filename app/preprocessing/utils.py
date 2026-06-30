@@ -559,6 +559,30 @@ def extract_context_window(
         for _, r in window.iterrows()
     ]
 
+def extract_time_window(
+    sentences: pd.DataFrame,
+    center_sec: float,
+    before_sec: float = 0.0,
+    after_sec: float = 360.0,
+) -> list[dict]:
+    """center_sec 기준 [center-before_sec, center+after_sec] elapsed_sec 구간 행을 반환한다.
+
+    extract_context_window 의 시간 기반 버전. 복습 연계(항목5)의 도입부 복습은 여러 문장에 걸쳐
+    이어지므로 문장 개수(±N)가 아니라 시간 윈도우로 컨텍스트를 끊는다 (goldset opening recall 평가 기반).
+
+    Returns: [{"sentence_id", "elapsed_sec", "text"}, ...] (elapsed_sec 오름차순)
+    """
+    lo, hi = center_sec - before_sec, center_sec + after_sec
+    window = sentences[(sentences["elapsed_sec"] >= lo) & (sentences["elapsed_sec"] <= hi)]
+    window = window.sort_values("elapsed_sec")
+    return [
+        {
+            "sentence_id": int(r["sentence_id"]),
+            "elapsed_sec": float(r["elapsed_sec"]),
+            "text": str(r["text_raw"]),
+        }
+        for _, r in window.iterrows()
+    ]
 
 def format_sentences_as_text(sentences: list[dict]) -> str:
     """sentence dict 목록을 '[elapsed_sec]s text' 형태 문자열로 결합한다."""
