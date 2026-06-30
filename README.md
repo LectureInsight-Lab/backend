@@ -18,7 +18,7 @@
 
 ---
 
-## 2. 사용자가 보는 흐름
+## 2. 워크플로우
 
 ```
 ┌────────────────────┐    ┌───────────────────────────────┐    ┌────────────────────┐
@@ -33,11 +33,11 @@
 ```
 
 분석 한 건은 보통 **수십 초~수 분**이 걸립니다 (강의 길이·Gemini 응답 속도에 따라).
-프론트엔드는 **백그라운드 분석**을 시작한 뒤 진행률을 폴링하므로, 창을 두고 다른 작업을 해도 됩니다.
+대시보드는 **백그라운드 분석**을 시작한 뒤 진행률을 폴링하므로, 창을 두고 다른 작업을 해도 됩니다.
 
 ---
 
-## 3. 무엇을 평가하나 — 18개 강의력 항목
+## 3. 18개 강의력 항목
 
 5개 **카테고리** 로 묶이고, 카테고리마다 **종합 점수에 기여하는 비중(가중치)** 이 다릅니다.
 
@@ -82,7 +82,7 @@
 
 ---
 
-## 6. 실행 방법 — 조원/사용자용 가이드
+## 6. 실행 방법
 
 > 권장: **Conda 전용 환경**. `mecab` · `sentence-transformers` 는 **선택**(없어도 폴백/스킵으로 동작).
 > 필수 준비물: Gemini API 키 1개(`.env` 의 `API_KEY`).
@@ -138,7 +138,7 @@ npm run dev                       # → http://localhost:3000
 분석 결과를 콘솔에 바로 출력하고 싶을 때:
 
 ```bash
-python -m app.analysis.pipeline data/raw/2026-02-02_kdt-backendj-21th.txt -c 5
+python -m app.analysis.pipeline data/raw/[데이터 명].txt -c 5
 #   -c, --concurrency : Gemini 동시 요청 수 (무료 티어는 1 권장)
 ```
 
@@ -152,11 +152,11 @@ curl -s http://localhost:8000/health
 # 2) 강의 1편 동기 분석 (시간이 오래 걸리므로 짧은 텍스트 권장)
 curl -X POST http://localhost:8000/api/v1/analysis/lecture \
   -H "Content-Type: application/json" \
-  -d '{"instructor_id":"demo","lecture_date":"2026-02-02","course_id":"kdt-backendj-21th"}'
+  -d '{"instructor_id":"demo","lecture_date":"2026-02-02","course_id":"[강의 명]"}'
 
 # 3) 백그라운드(권장) — job_id 받아 진행률 폴링
 curl -X POST http://localhost:8000/api/v1/analysis/lecture/async -H "Content-Type: application/json" \
-  -d '{"instructor_id":"demo","lecture_date":"2026-02-02","course_id":"kdt-backendj-21th"}'
+  -d '{"instructor_id":"demo","lecture_date":"2026-02-02","course_id":"[강의 명]"}'
 # 응답: {"job_id":"abc123..."}
 
 curl http://localhost:8000/api/v1/analysis/job/abc123...
@@ -165,7 +165,7 @@ curl http://localhost:8000/api/v1/analysis/job/abc123...
 
 ---
 
-## 7. Architecture — 내부 흐름 (개발자용)
+## 7. Architecture — 내부 흐름 
 
 ### 7-1. 한 번 들어온 강의가 거치는 5단계
 
@@ -206,6 +206,7 @@ curl http://localhost:8000/api/v1/analysis/job/abc123...
         └──────────────────────────┬──────────────────────────┘
                                    │
                   JSON 응답  /  리포트 생성(`/report/generate`)
+                              · Streamlit 대시보드
                               · Next.js 프론트 — `narrative` 호출로 종합 해설 추가
 ```
 
@@ -319,7 +320,7 @@ sequenceDiagram
   "instructor_id": "instructor_01",
   "lecture_date": "2026-02-02",        // YYYY-MM-DD
   // 아래 둘 중 하나는 필수
-  "course_id": "kdt-backendj-21th",     // paths.yaml 의 stt_dir 에서 파일 로드
+  "course_id": "backendj-21th",     // paths.yaml 의 stt_dir 에서 파일 로드
   "raw_text": "<09:11:17> id: ..."     // STT 원문을 직접 전달
 }
 ```
@@ -382,13 +383,13 @@ backend/
 │   │   ├── pipeline.py            # ★ 18 항목 오케스트레이터 (_ITEMS 레지스트리)
 │   │   ├── rubric_llm.py          # Gemini 호출 + 항목 YAML 프롬프트 로더
 │   │   ├── rubrics.py             # configs/item_rubrics.yaml 로더 (해설용)
-│   │   ├── analyzer.py            # LLM 게이트웨이: _call_llm (explainer/narrative 공유) + 캐싱·재시도
+│   │   ├── analyzer.py            # _call_llm — explainer/narrative 가 공유하는 LLM 게이트웨이
 │   │   ├── explainer.py           # 항목별 자연어 해설 (grounds/reason/strengths/improvements)
 │   │   ├── narrative.py           # 종합 해설(overall_feedback) + 요약(summary)
 │   │   ├── scorer.py              # 카테고리 가중 평균 + 트렌드 + 주차 집계
 │   │   ├── schemas.py             # Utterance / Sentence / InstructorScorecard / ItemScore
 │   │   ├── embedder.py            # ★ KR-SBERT 임베딩 유틸 (item11·item14 가 사용) — 사용 중
-│   │   ├── templates.py           # load_item_prompt — 항목 프롬프트 YAML 로더 (item14 가 사용)
+│   │   ├── templates.py           # load_item_prompt (item14 가 사용) + build_messages(미사용 경로)
 │   │   ├── emphasis_checker.py    # item07 강조 판정 보조
 │   │   ├── item01_repetition.py
 │   │   ├── item04_learning_objectives.py
@@ -403,12 +404,15 @@ backend/
 │   │   ├── item14_practice_link.py
 │   │   ├── item15_error_handling.py
 │   │   ├── item18_question.py
-│   │   └── prompts/items/         # 항목 LLM 프롬프트 (item04~item18 + README.md)
+│   │   ├── prompts/items/         # 항목 LLM 프롬프트 (item04~item18 + 14_practice_link.yaml)
+│   │   └── (behavior_tagger.py / ensemble.py — 구현됐으나 import 0건, 죽은 v2-앙상블 경로)
 │   ├── report/
 │   │   ├── report_generator.py    # OUTPUT_ROOT, generate(scorecard, formats)
 │   │   ├── charts.py              # 레이더 / 추이 차트
 │   │   ├── html.py                # Jinja2
 │   │   └── docx.py                # python-docx
+│   ├── dashboard/
+│   │   └── app.py                 # (선택) Streamlit 대시보드
 │   ├── main.py                    # FastAPI 부트스트랩
 │   ├── models/ / utils/           # placeholder
 ├── configs/
@@ -416,7 +420,9 @@ backend/
 │   ├── item_rubrics.yaml          # 항목별 채점 기준(criterion/high/low/caveat) — explainer·narrative 주입용
 │   ├── kiwi_user_dict.yaml        # Kiwi 사용자 사전
 │   ├── paths.example.yaml         # paths.yaml 템플릿
-│   └── paths.yaml                 # ★ 외부 STT 경로 (gitignore 권장)
+│   ├── paths.yaml                 # ★ 외부 STT 경로 (gitignore 권장)
+│   └── (bow_indicators.yaml / few_shot_examples.yaml
+│        — 죽은 v2-앙상블 경로(behavior_tagger/templates.build_messages)만 로드 → 런타임 미사용)
 ├── data/                          # 원본/처리 데이터 (gitignore)
 │   ├── raw/                       # STT 원본 .txt
 │   └── processed/
@@ -494,13 +500,13 @@ LLM_CONCURRENCY=10                # 무료 티어면 1, 유료면 5~10
 
 # 서버
 APP_HOST=0.0.0.0                  # uvicorn 바인드
+APP_HOST_PUBLIC=localhost         # 브라우저 접속용 (Streamlit/프론트 표시용)
 APP_PORT=8000
+DASHBOARD_PORT=8501
 
-# CORS (Next.js 프론트 허용)
-CORS_ORIGINS=http://localhost:3000
+# CORS (Next.js / Streamlit 허용)
+CORS_ORIGINS=http://localhost:3000,http://localhost:8501
 ```
-
-> 프론트엔드(Next.js, `frontend/`)는 API 주소를 자체 `NEXT_PUBLIC_API_BASE_URL` 로 지정합니다.
 
 ---
 
@@ -546,54 +552,7 @@ data/processed/scorecards/{instructor_id}/{lecture_date}.json
 
 ---
 
-## 16. v2 초안과 현재의 차이 (히스토리)
-
-초기 v2 노션 설계는 RAG + BoW + Few-shot 앙상블이었으나, 실제 구현은 **항목별 모듈화 + 정량/LLM 단일 신호 + 표현 레이어 분리** 로 단순화되었습니다.
-
-| 영역 | 초안 (노션 PIPELINE) | 현재 구현 |
-|---|---|---|
-| 컨텍스트 | RAG 검색(text-embedding-3-small + 코사인 top-K) | 항목별 직접 추출 (intro 30분 / 키워드 윈도우 / labeled 청크 / Q-A 페어 / KeyBERT) |
-| 신호원 | LLM 70% + BoW 30% 앙상블 | LLM 단독 또는 정량 단독 (항목별 택1) — 앙상블 모듈은 미연결 |
-| Few-shot | 항목별 good/bad 예시 주입 | 미사용 → 제거됨 (`few_shot_examples.yaml`·`templates.build_messages`/`format_few_shot` 삭제) |
-| LLM | OpenAI GPT-4o + LangChain | Google Gemini 직접 (google.generativeai) |
-| 임베딩 | text-embedding-3-small (RAG 검색) | KR-SBERT(`embedder.py`) — RAG 아닌 항목 11·14 유사도 계산용으로 **재활용** |
-| 문장 분리 | (지정 없음) | KSS(공유 입력) + Kiwi(sentencizer) — Mecab 에서 전환 |
-| 오케스트레이션 | `analyzer.py` + `ensemble.py` | `pipeline.py` 단일 진입점 + 모듈 레지스트리 |
-| 실행 방식 | asyncio.gather 18 병렬 | 항목 1→18 순차 (rate limit 보호 + 진행률 순서) |
-| 해설 생성 | (없음) | `explainer.py`(항목별) + `narrative.py`(종합) — 분리된 표현 레이어 |
-| 백그라운드 | (없음) | `core/jobs.py` + `/lecture/async` + `/job/{id}` 폴링 |
-| 영속화 | (미정) | `store.py` 파일 JSON |
-
-### 정리 대상 (검증 완료 — import 참조 기준)
-
-> 아래는 실제 `grep` 으로 import 참조를 확인한 결과다.
-
-**✅ 제거 완료 (죽은 v2 BoW-앙상블 경로 + Streamlit):**
-
-- ~~`app/analysis/behavior_tagger.py`, `ensemble.py`~~ — **삭제됨** (import 0건). 동반으로 ~~`configs/bow_indicators.yaml`~~(behavior_tagger 전용), ~~`configs/few_shot_examples.yaml`~~(`templates` 죽은 few_shot 경로 전용), 전용 테스트 ~~`tests/test_behavior_tagger.py`·`test_ensemble.py`~~, 그리고 `tests/test_analyzer.py` 의 죽은-경로 테스트도 함께 제거.
-- ~~`app/dashboard/app.py` (Streamlit)~~ — **삭제됨**. 실제 프론트는 Next.js(`frontend/`). 함께: `pyproject.toml` 의 `streamlit`·`requests`, `.env.example`·`config.py` 의 `:8501`/`DASHBOARD_PORT`/`APP_HOST_PUBLIC`.
-
-**✅ 리네임/오타 정정 완료:**
-
-- `14_practice_link.yaml` → **`item14_practice_link.yaml`** (item14 의 `_PROMPT_PATH` 경로 상수도 함께 수정).
-- `prompts/items/REDAME.md` → **`README.md`**.
-
-**✅ 죽은 v2-analyze 경로 제거 완료 (live 코어만 남김):**
-
-- `app/analysis/analyzer.py` — `_call_llm`(+`_generate`/`_get_client`/캐싱)만 남김. `explainer`·`narrative` 가 사용. 죽은 `analyze_item`/`analyze_lecture`/`_select_chunks`/`_parse_response`/`_item_query` 제거.
-- `app/analysis/templates.py` — `load_item_prompt`(항목 프롬프트 로더)만 남김. `item14` 가 사용. 죽은 `build_messages`/`format_few_shot`/`format_rag_context`/`load_system_prompt`/`_SafeDict` 제거.
-
-**✅ 옛 원본 제거 완료:**
-
-- ~~`app/preprocessing/question.py`, `summary.py`, `sequence_violation.py`, `error_handling.py`~~ — **삭제됨**. `item18_question`·`item08_summary`·`item06_sequence_violation`·`item15_error_handling` 로 대체 (구식 import 0건 확인).
-
-**삭제 금지 — 실제 사용 중 (참고):**
-
-- `app/analysis/embedder.py` — KR-SBERT 임베딩 유틸. `item11_prerequisite`·`item14_practice_link` + `tests/test_embedder.py` 가 `embed`·`cosine_sim`·`build_index`·`search` 로 사용 → 유지.
-
----
-
-## 17. 참고 논문 (설계 근거)
+## 16. 참고 논문 (설계 근거)
 
 1. Göllner et al. (2025). *Revealing teaching quality through lesson semantics*. British Journal of Educational Psychology.
 2. *Analyzing Large Language Models for Classroom Discussion Assessment*. EDM 2024.
