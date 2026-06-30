@@ -48,9 +48,10 @@ dev = [
 ]
 # 선택: 항목 14(실습 연계)의 이론↔실습 KR-SBERT 코사인 유사도용.
 # torch 동반(무거움) + 최초 실행 시 KR-SBERT 모델 ~400MB 다운로드 → 기본 설치엔 미포함.
-# 설치: pip install -e ".[embeddings]"  (미설치 시 item14 만 자동 스킵, 나머지 분석은 정상)
+# 설치: pip install -e ".[embeddings]"  (미설치 시 item14·item7 만 자동 스킵, 나머지 분석은 정상)
 embeddings = [
     "sentence-transformers>=3.0",
+    "keybert>=0.8",            # item7 키워드 강조 — KeyBERT 날짜별 top-N 추출
 ]
 
 [build-system]

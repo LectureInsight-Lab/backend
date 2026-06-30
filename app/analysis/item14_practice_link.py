@@ -63,6 +63,9 @@ def _llm_score(theory_text: str, practice_text: str) -> tuple[float, str, str]:
             config=types.GenerateContentConfig(
                 temperature=0.1,
                 response_mime_type="application/json",
+                thinking_config=types.ThinkingConfig(
+                    thinking_budget=settings.llm_thinking_budget
+                ),
             ),
         )
         result = json.loads(resp.text)

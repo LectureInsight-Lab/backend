@@ -31,9 +31,17 @@ _client = None
 def _get_client():
     global _client
     if _client is None:
+        import os
+
         from google import genai
 
-        _client = genai.Client(api_key=settings.api_key)
+        env_key = os.environ.get("API_KEY") or os.environ.get("GEMINI_API_KEY")
+        src = "OS환경변수(⚠️.env무시)" if env_key else ".env파일"
+        key = settings.api_key
+        logger.warning(
+            f"[label] Gemini 키 로드 — 출처={src}, 끝6자리=...{key[-6:] if key else '(빈값)'}"
+        )
+        _client = genai.Client(api_key=key)
     return _client
 
 
@@ -369,6 +377,8 @@ async def _classify_one(
     from google.genai import types
 
     async with semaphore:
+        if settings.llm_delay_sec:
+            await asyncio.sleep(settings.llm_delay_sec)  # 무료 티어 RPM 회피용 throttle
         try:
             response = await asyncio.to_thread(
                 client.models.generate_content,
@@ -377,6 +387,9 @@ async def _classify_one(
                 config=types.GenerateContentConfig(
                     temperature=_LLM_TEMPERATURE,
                     response_mime_type="application/json",
+                    thinking_config=types.ThinkingConfig(
+                        thinking_budget=settings.llm_thinking_budget
+                    ),
                 ),
             )
             result = json.loads(response.text)

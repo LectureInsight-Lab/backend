@@ -54,13 +54,39 @@ def run_pipeline(
     top_n:        int        = DEFAULT_TOP_N,
     model_name:   str        = KEYBERT_MODEL,
 ) -> dict[str, list[tuple[str, float]]]:
+    """anchored_labeled.json 파일을 읽어 키워드를 추출·저장한다 (CLI/배치 진입점).
+
+    실제 추출 로직은 ``build_keywords_from_records`` 가 담당하며, 이 함수는 파일 로드만 한다.
     """
-    전체 파이프라인 실행 후 keywords.json 에 저장한다.
+    labeled_path = Path(labeled_path)
+    logger.info(f"[Pipeline] 입력: {labeled_path}")
+    records = json.loads(labeled_path.read_text(encoding="utf-8"))
+    logger.info(f"[Pipeline] 레코드 {len(records)}개 로드")
+    return build_keywords_from_records(
+        records, output_path=output_path, top_n=top_n, model_name=model_name
+    )
+
+
+def build_keywords_from_records(
+    records:            list[dict],
+    output_path:        str | Path = KEYWORDS_JSON,
+    top_n:              int        = DEFAULT_TOP_N,
+    model_name:         str        = KEYBERT_MODEL,
+    df_auto_stopwords:  bool       = True,
+) -> dict[str, list[tuple[str, float]]]:
+    """라벨링 레코드(list[dict]; file·llm_label·text 키)에서 날짜별 top-N 키워드를 추출해
+    keywords.json 으로 저장한다.
+
+    파일을 거치지 않고 메모리 레코드를 직접 받으므로 분석 파이프라인이 라벨링 직후 그대로
+    호출할 수 있다(항목 7 자동 생성용).
+
+    ⚠️ df_auto_stopwords: '여러 강의를 모았을 때' 모든 강의에 공통 등장하는 단어를 불용어로
+    빼는 기능이라 **단일 강의(문서 1개)에서는 모든 명사를 제거**해 키워드가 0개가 된다.
+    배치(여러 강의)면 True, 단일 강의 자동 생성이면 반드시 False 로 호출할 것.
 
     Steps
     -----
-    1. anchored_labeled.json 로드
-    2. NounExtractor (Kiwi) — 전체 레코드, df_auto_stopwords=True
+    2. NounExtractor (Kiwi) — df_auto_stopwords 옵션 적용
     3. 날짜별 명사 풀 + 텍스트 합산
     4. KeyBERT — 날짜 단위 top-N (모델 한 번만 로드)
     5. keywords.json 저장
@@ -73,17 +99,11 @@ def run_pipeline(
     from sentence_transformers import SentenceTransformer
     from app.preprocessing.item07_noun_extractor import NounExtractor, normalize_text
 
-    labeled_path = Path(labeled_path)
-    output_path  = Path(output_path)
-
-    # ── Step 1: 레코드 로드 ───────────────────────────────────────────────────
-    logger.info(f"[Pipeline] 입력: {labeled_path}")
-    records = json.loads(labeled_path.read_text(encoding="utf-8"))
-    logger.info(f"[Pipeline] 레코드 {len(records)}개 로드")
+    output_path = Path(output_path)
 
     # ── Step 2: Kiwi 명사 추출 (구간별) ──────────────────────────────────────
     logger.info("[Pipeline] Kiwi 형태소 분석 + 명사 추출 시작")
-    noun_ex = NounExtractor(df_auto_stopwords=True)
+    noun_ex = NounExtractor(df_auto_stopwords=df_auto_stopwords)
     section_nouns = noun_ex.extract(records)   # {(date, label): [nouns]}
 
     # ── Step 3: 날짜별 명사 풀 + 텍스트 합산 ─────────────────────────────────
