@@ -3,10 +3,10 @@ app/preprocessing/item04_learning_objectives.py — 항목 4 학습 목표 안�
 
 담당자: 심소민
 
-도입부 30분 발화를 하나의 chunk(LLM 입력 payload)로 묶어 반환한다.
+도입부 7분 발화를 하나의 chunk(LLM 입력 payload)로 묶어 반환한다.
 LLM 호출·채점은 app/analysis가 담당한다.
 
-흐름: run(df) → 도입부 30분 추출 → chunk 문자열
+흐름: run(df) → 도입부 7분 추출 → chunk 문자열
 입력: 단일 강의 kss DataFrame (parse_and_split 결과). 필수 컬럼: elapsed_sec, text_raw
 출력: {"chunk": str}  — 도입부 전체 발화 텍스트
 """
@@ -25,7 +25,7 @@ from app.preprocessing.utils import (
 
 MODULE_NAME = "learning_objectives"
 ITEM_ID = 4
-INTRO_WINDOW_SEC = 1800  # 도입부 30분
+INTRO_WINDOW_SEC = 420  # 도입부 7분 (goldset opening recall 평가 기반; 30분→7분 축소, recall 1.0 유지)
 
 
 # ─── 전처리 → chunk 생성 ──────────────────────────────────────────
@@ -51,7 +51,7 @@ def run(df: pd.DataFrame) -> dict:
         df: 단일 강의 발화 DataFrame. 필수 컬럼: elapsed_sec, text_raw.
 
     Returns:
-        {"chunk": str} — 도입부 30분 전체 발화 텍스트.
+        {"chunk": str} — 도입부 7분 전체 발화 텍스트.
     """
     transcript = _intro_transcript(df)
     return {"chunk": f"[강의 도입부 발화]\n{transcript}"}

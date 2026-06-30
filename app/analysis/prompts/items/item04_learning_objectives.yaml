@@ -1,5 +1,5 @@
 # 항목 4: 학습 목표 안내 — LLM 채점 프롬프트 (담당: 심소민)
-# 입력 chunk: 강의 도입부 30분 발화 (1건)
+# 입력 chunk: 강의 도입부 7분 발화 (1건)
 
 id: 4
 name: 학습 목표 안내
@@ -25,7 +25,7 @@ system: |
   {"score": 1~5 정수, "goal_stated": bool, "order_mentioned": bool, "evidence": "원문 발췌"}
 
 user_template: |
-  아래는 강의 도입부(약 30분) 발화입니다.
+  아래는 강의 도입부(약 7분) 발화입니다.
 
   {chunk}
 
