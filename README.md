@@ -1,4 +1,4 @@
-# LectureInsight Backend (v2)
+# LectureInsight Backend
 
 > 강의 녹취록을 분석해 **18가지 강의력 항목별 점수 + 종합 해설 + 다운로드 가능한 리포트** 를 자동으로 생성하는 백엔드 엔진.
 
