@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
-    cors_origins: str = "http://localhost:3000,http://localhost:8501"
+    cors_origins: str = "http://localhost:3000"
 
     # ── LLM (Gemini) ───────────────────────────────────────
     api_key: str = ""                          # .env: API_KEY (Gemini API key)

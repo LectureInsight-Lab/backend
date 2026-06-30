@@ -1,7 +1,7 @@
 """FastAPI 진입점 (v2).
 
-분석/리포트 REST API. Streamlit 대시보드(``app/dashboard/app.py``)는
-이 API를 호출해 결과를 조회한다.
+분석/리포트 REST API. 프론트엔드(Next.js, ``frontend/``)가 이 API를 호출해
+분석을 실행하고 결과를 조회한다.
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
