@@ -27,6 +27,19 @@ _TONE = (
     "'~인 경향이 있습니다'처럼 완곡하고 신중한 어조로 서술하세요."
 )
 
+_RULES = (
+    "📌 작성 규칙:\n"
+    "- 한국어로만 쓰고, 카테고리·항목명을 영어/로마자로 병기하지 마세요 "
+    "(예: '구조(structure)'·'언어(language)' 금지 → '구조'·'언어 표현').\n"
+    "- 같은 카테고리 안에서 항목들이 상반된 결과를 보이면(예: 전달력은 좋으나 말 속도는 빠름) "
+    "칭찬과 지적을 모순처럼 나열하지 말고, '어떤 점은 좋지만 어떤 점은 아쉽다'처럼 차이를 "
+    "명시적으로 구분해 한 흐름으로 서술하세요.\n"
+    "- '언어 일관성'은 존댓말/반말의 통일 여부만 뜻합니다. 그 효과는 오직 '강사의 전문성·신뢰도'로만 "
+    "서술하세요(일관된 높임말은 강사를 더 전문적이고 신뢰감 있게 보이게 함). 학습자의 내용 이해/혼란과는 "
+    "엮지 말고, 개선 제안은 '일관성을 가져야 한다/말투를 통일하라'가 아니라 '강의에서 높임말(존댓말) 사용을 "
+    "권장한다'는 투로 쓰세요(반말로 통일하라는 식은 금지).\n"
+)
+
 _FEEDBACK_SYSTEM_SINGLE = (
     "당신은 강의 코칭 전문가입니다. 한 강사의 '단일 강의' 분석 결과를 바탕으로 '이번 강의'에 "
     "대한 '상세한 종합 분석'을 작성합니다. 다음을 모두 담아 2~3개 단락, 8문장 이상으로 충실하게 "
@@ -35,7 +48,7 @@ _FEEDBACK_SYSTEM_SINGLE = (
     "(2) 잘한 점을 카테고리·항목과 함께 구체적으로,\n"
     "(3) 약점과 가장 효과적인 개선 방향을 구체적·실행 가능하게.\n"
     "점수를 단순 나열하지 말고 흐름 있게 코칭하듯 서술하세요. 각 항목의 rubric(채점 기준)에 "
-    "근거하고, 단락은 빈 줄로 구분하세요.\n" + _TONE
+    "근거하고, 단락은 빈 줄로 구분하세요.\n" + _RULES + _TONE
 )
 _FEEDBACK_SYSTEM_AGG = (
     "당신은 강의 코칭 전문가입니다. 한 강사의 '여러 강의를 종합한' 분석 결과를 바탕으로 이 "
@@ -46,7 +59,7 @@ _FEEDBACK_SYSTEM_AGG = (
     "(3) 반복되는 약점과 가장 효과적인 우선 개선 방향을 구체적·실행 가능하게.\n"
     "⚠️ '이번 강의' 같은 단일 강의 표현은 쓰지 말고 '이 강사는/전반적으로/여러 강의에 걸쳐'처럼 "
     "종합적 시점으로 서술하세요. 각 항목의 rubric(채점 기준)에 근거하고, 단락은 빈 줄로 구분하세요.\n"
-    + _TONE
+    + _RULES + _TONE
 )
 _SUMMARY_SYSTEM = (
     "당신은 편집자입니다. 주어진 강의 종합 해설을 핵심만 2~3문장으로 요약합니다. 새로운 정보를 "
@@ -55,8 +68,22 @@ _SUMMARY_SYSTEM = (
 )
 
 
+# 내부 카테고리 키(영문) → 해설용 한국어 라벨. LLM 입력에서 영어 병기를 원천 차단.
+_CATEGORY_KO = {
+    "language": "언어 표현 품질",
+    "structure": "강의 도입 및 구조",
+    "concept": "개념 설명 명확성",
+    "practice": "예시 및 실습 연계",
+    "interaction": "수강생 상호작용",
+}
+
+
+def _category_ko(name: str) -> str:
+    return _CATEGORY_KO.get(name, name)
+
+
 def _card_context(card: InstructorScorecard, is_aggregate: bool, lecture_count: int) -> str:
-    cats = "\n".join(f"- {c.category}: {c.score}점 (가중치 {c.weight})" for c in card.category_scores)
+    cats = "\n".join(f"- {_category_ko(c.category)}: {c.score}점 (가중치 {c.weight})" for c in card.category_scores)
     items = "\n".join(
         f"- [{it.item_id}] {it.name}: {it.final_score}점"
         + (f" | 채점기준 {rubric_line(it.item_id)}" if rubric_line(it.item_id) else "")

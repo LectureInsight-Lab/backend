@@ -35,4 +35,6 @@ def rubric_line(item_id: int) -> str:
         parts.append(f"고득점=({r['high']})")
     if r.get("low"):
         parts.append(f"저득점=({r['low']})")
+    if r.get("caveat"):
+        parts.append(f"주의=({r['caveat']})")
     return " / ".join(parts)
