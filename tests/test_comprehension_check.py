@@ -46,7 +46,7 @@ def test_line_level_single_count():
 def test_pattern_breakdown():
     prof = cc.comprehension_profile([_u(0, "되셨어요"), _u(30, "맞죠"), _u(60, "되셨어요")])
     assert prof["check_count"] == 3
-    assert prof["pattern_breakdown"]["되셨/됐"] == 2
+    assert prof["pattern_breakdown"]["되셨_높임"] == 2
     assert prof["pattern_breakdown"]["맞죠/맞나요"] == 1
 
 
