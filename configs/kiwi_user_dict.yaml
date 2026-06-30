@@ -109,6 +109,40 @@ mysql_string_functions_en:
   words:
     - BLLB   # BLOB의 ASR 오인식 표기 — 외국어(SL)가 아닌 고유명사로 명사 추출 가능하게
 
+# [Step10/11 개선] 2026-06-30: 멀티날짜 골드 키워드 단일 토큰 등록
+# COMPOUND_MERGE로 공백 분절이 병합된 후 Kiwi가 NNG로 인식하도록 사전 등록
+mysql_joins:
+  pos: NNG
+  words:
+    - 이너조인           # INNER JOIN (COMPOUND_MERGE: 이너 조인)
+    - 아우터조인         # OUTER JOIN (COMPOUND_MERGE: 아우터 조인)
+    - 크로스조인         # CROSS JOIN (COMPOUND_MERGE: 크로스 조인)
+    - 셀프조인           # SELF JOIN (COMPOUND_MERGE: 셀프 조인)
+
+mysql_subquery:
+  pos: NNG
+  words:
+    - 상관쿼리           # CORRELATED SUBQUERY (COMPOUND_MERGE: 상관 쿼리)
+    - 다중칼럼           # MULTI-COLUMN SUBQUERY (COMPOUND_MERGE: 다중 칼럼)
+    - 인라인뷰           # INLINE VIEW (COMPOUND_MERGE: 인라인 뷰)
+    - 단일행             # SINGLE-ROW SUBQUERY
+    - 다중행             # MULTI-ROW SUBQUERY
+
+mysql_ddl:
+  pos: NNG
+  words:
+    - 제약조건           # CONSTRAINT (COMPOUND_MERGE: 제약 조건)
+    - 크리에이트테이블   # CREATE TABLE (COMPOUND_MERGE: 크리에이트 테이블)
+    - 인포메이션스키마   # INFORMATION_SCHEMA (COMPOUND_MERGE: 인포메이션 스키마)
+    - 재귀쿼리           # RECURSIVE CTE (COMPOUND_MERGE: 재귀 쿼리)
+
+mysql_tcl:
+  pos: NNG
+  words:
+    - 스타트트랜잭션     # START TRANSACTION (COMPOUND_MERGE: 스타트 트랜잭션)
+    - 오토커밋           # AUTOCOMMIT
+    - 락                 # LOCK
+
 spring:
   pos: NNG
   words:

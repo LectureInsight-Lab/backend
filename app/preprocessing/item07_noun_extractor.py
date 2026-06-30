@@ -52,6 +52,24 @@ GOLD_WHITELIST = {
     # MySQL 문자열 함수 보호 (2026-02-09 기준, 타 날짜에도 등장 가능)
     "리플레이스", "트림", "콘캣", "캐릭터셋", "콜레이션",
     "오토인클라이먼트", "베이스64", "로드언더바파일", "프라이머리키",
+    # MySQL DML / TCL (02-13 골드 키워드 — STOPWORDS에서 이동)
+    "딜리트", "업데이트", "인서트", "커밋", "롤백", "오토커밋",
+    # [Step10 개선] 2026-06-30: 멀티날짜 비교 후 WHITELIST 확장
+    # 체크: DF=14/15 → 자동 불용어 처리됨 → 02-12 gold (CHECK CONSTRAINT) 복구
+    "체크",
+    # SQL 조인/서브쿼리 계열 (02-10~11 gold, DF 중간 → 보호 강화)
+    "서브쿼리", "유니온", "익스플레인",
+    # 복합 골드 키워드 단일토큰 형태 (COMPOUND_MERGE → 이 형태로 변환)
+    "이너조인", "아우터조인", "크로스조인", "셀프조인",
+    "상관쿼리", "다중칼럼", "인라인뷰",
+    # 제약조건: [Step23] 2026-06-30 GOLD_WHITELIST에서 제거
+    # 이유: MIN_GOLD_IDF=1.2 부스트로 02-13(TCL 강의)에서 FP rank10 차지 → 락 진입 차단.
+    #       df(제약조건)<15이므로 auto-stopword 위험 없음 (df≈10~12 예상).
+    #       02-12에서 제약조건의 TF가 labeled sections에서 매우 낮아 어차피 top-10 미진입.
+    "재귀쿼리", "인포메이션스키마",
+    "스타트트랜잭션",
+    # 02-13 TCL 추가 gold
+    "락", "세션",
 }
 
 # ── 수동 불용어 ────────────────────────────────────────────────────────────────
@@ -66,7 +84,7 @@ STOPWORDS: set[str] = {
     "강사", "해당", "일반", "동일", "중요", "발생", "정확", "명시",
     "느낌", "눈도장", "마찬가지", "예전", "차이", "상황", "용어",
     "각각", "아무것", "기억", "단어", "기타", "가이드", "공유",
-    "사람", "필요", "성공", "체크", "키워드", "버전", "형식",
+    "사람", "필요", "성공", "키워드", "버전", "형식",
     "오른쪽", "도움말", "섹션", "이용", "복사", "추가", "수정", "선택",
     # 복합어 분절 잔재 / ASR 음차 오류
     "바이", "언더", "네임", "마이에스큐",
@@ -83,6 +101,250 @@ STOPWORDS: set[str] = {
     # 2차 ASR 오류
     "악푸스트림", "바이트스", "워팔트리", "보역", "트리뷰트",
     "객체야", "3트럴", "아까", "오브",
+    # [Step6 개선] 2026-06-29: 가산형 점수 도입 후 신규 노출된 노이즈 추가
+    # 문제: TF 부스트로 합성어 파편(리플/플레이스) 및 담화어(보자/이네/올림/패드)가 상위 진입
+    # 해결: 명시적 불용어 등록으로 후보 풀에서 완전 제거
+    "리플",       # 리플레이스(REPLACE) 파편 — 완전 용어는 GOLD_WHITELIST에 있음
+    "플레이스",   # 리플레이스(REPLACE) 파편
+    "보자",       # 담화어 ("같이 보자")
+    "이네",       # 한국어 접속사/강조 어미
+    "올림",       # 수학 올림(ceiling) 동사 — ROUND/CEIL 강의 파편
+    "패드",       # LPAD/RPAD 합성어 파편 — 단독 의미 없음
+    # [Step7 개선] 2026-06-29: Step6 top-10 잔여 노이즈 제거
+    # 문제: 가산형 공식 후 무조건/앞뒤/반올림이 콘캣 등 골드 키워드보다 상위
+    # 해결: 범용어 및 비핵심 SQL 연산어 불용어 등록
+    "무조건",     # 담화어 ("무조건 이렇게")
+    "앞뒤",       # 위치 범용어 — SQL 문자열 위치 관련 파편
+    "반올림",     # 수학 반올림 — ROUND 강의 파편; 핵심 SQL 함수와 무관
+    # [Step10 개선] 2026-06-30: 02-10~02-13 멀티날짜 비교 후 추가 노이즈 제거
+    # 문제: 02-09 전용으로 튜닝된 STOPWORDS가 타 날짜 노이즈를 걸러내지 못함.
+    #       02-10: 테이/이트(부분절단), 조금/하지/교수(담화어/비CS)
+    #       02-11: 가로/세로(방향어), 아우(2음절잔재), 서브콜/거지/주쿼리(ASR 오인식)
+    #       02-12: 위에/이제/이사(담화어), 스가/마이사이/마이사/소멸(노이즈)
+    #       02-13: 스턴트/퍼런시스(ASR오류), 마킹/한쪽(담화어), 코밋(커밋 중복음차), 지점(범용어)
+    # 해결: 명백한 노이즈/담화어/비CS 단어 STOPWORDS 추가
+    # 02-10
+    "테이",       # 테이블 부분 절단 토큰
+    "이트",       # 라이트/이트 부분 절단 토큰
+    "조금",       # 담화어 ("조금 다르게")
+    "하지",       # 담화어 ("하지만")
+    "교수",       # 비CS — 강사 지칭어
+    # 02-11
+    "가로",       # 방향어
+    "세로",       # 방향어
+    "아우",       # 아우터 2음절 잔재
+    "서브콜",     # ASR 오인식
+    "거지",       # ASR 오인식
+    "주쿼리",     # 주(主)쿼리 분절 잔재 — 의미 불명확
+    "서브커리",   # 서브쿼리 음차 오류 변형
+    # 02-12
+    "위에",       # 담화어 ("위에 있는")
+    "이제",       # 담화어 ("이제 보면")
+    "이사",       # 비CS 담화어
+    "스가",       # ASR 노이즈
+    "마이사이",   # MySQL 음차 오류 파편
+    "마이사",     # MySQL 음차 오류 파편
+    "소멸",       # 비CS (존재/소멸) 담화어
+    # 02-13
+    "스턴트",     # ASR 오류 (constant → 스턴트?)
+    "퍼런시스",   # reference 음차 오류
+    "마킹",       # 비CS 담화어
+    "한쪽",       # 방향 담화어
+    "코밋",       # 커밋 중복 음차 (커밋이 이미 올바른 형태)
+    "지점",       # 범용어 — SQL 문맥에서 의미 없음
+    # [Step11 개선] 2026-06-30: 2차 STOPWORDS 추가 (멀티날짜 2라운드 분석)
+    # 02-10
+    "약간",       # 담화어 ("약간 다르게")
+    # 02-11
+    "하나",       # 담화어 ("하나씩 보면")
+    "세일즈맨",   # 예제 데이터 (salesman) — SQL 실습 샘플 데이터
+    "월급",       # 예제 데이터 (salary) — SQL 실습 샘플 데이터
+    "데이",       # 부분 절단 토큰 (date? data? 의미 불명)
+    "완전",       # 담화어 ("완전히 다른")
+    "코리",       # 부분 절단 (Korea? query? 의미 불명)
+    "쿼리아",     # ASR 오인식 노이즈
+    # 02-12
+    "초기값",     # 범용 프로그래밍 용어 — 02-12 SQL goldset 무관
+    "토탈",       # total — 범용어
+    "반복",       # 담화어 / 반복문 범용어 — SQL DDL 맥락 무관
+    "마이살",     # MySQL 음차 오류 파편
+    # 02-13
+    "세이브",     # SAVEPOINT 파편 — 02-13 goldset에 없음
+    "부모",       # 비CS 담화어 (parent row는 외래키 맥락이지만 goldset 무관)
+    "토코밋",     # 오토커밋 파편 음차 오류
+    "에디터",     # 비CS — 도구 지칭어
+    # [Step12 개선] 2026-06-30: 3차 STOPWORDS (복합어 처리 후 단편 제거 + 추가 노이즈)
+    # 02-11 잔여 노이즈
+    "세일즈",     # 세일즈맨 어근 파편 (세일즈맨 제거 후 나머지)
+    "살이",       # ASR 오인식 (살이/살이쪄 등)
+    "워드",       # 비CS 담화어 (word)
+    # 02-12 노이즈 (복합어 COMPOUND_MERGE 후 안전하게 제거 가능한 단편)
+    "인라인",     # 인라인뷰 COMPOUND_MERGE 후 단독 인라인은 노이즈 — 02-12 gold 무관
+    "별칭",       # alias — 02-12 gold 없음
+    "시스",       # 인포메이션스키마 파편
+    "스키",       # 인포메이션스키마/스키마 파편
+    "듀얼",       # DUAL table — 02-12 gold 없음
+    # 02-13 복합어 처리 후 잔여 단편
+    "오토",       # 오토커밋/오토인클라이먼트 COMPOUND_MERGE 후 단독 오토는 잔재
+    "스타트",     # 스타트트랜잭션 COMPOUND_MERGE 후 단독 스타트는 잔재
+    "노액션",     # NO ACTION constraint — 02-13 gold 없음
+    "토코",       # 오토커밋 파편 (토코밋 삭제 후 나머지)
+    # 복합어 처리로 대체된 단편 (COMPOUND_MERGE + user dict 덕분에 안전하게 제거 가능)
+    "아우터",     # 아우터조인 복합어로 대체 — 02-10/11 gold 이미 매칭됨
+    # [Step13 개선] 2026-06-30: 멀티날짜 top-10 전수 분석 후 잔여 노이즈 일괄 추가
+    # 02-09 noise (rank 5-10)
+    "유니코드",   # Unicode — 02-09 gold 없음 (관련 강의이나 goldset 외)
+    "용해",       # ASR 오인식 노이즈
+    "라이언",     # 인명 — ASR 노이즈
+    "테일링",     # tailing — SQL gold 없음
+    "로케이트",   # LOCATE function — 02-09 gold 없음
+    # 02-10/11 공통 noise
+    "레프트",     # LEFT JOIN — 평가 goldset에 없음 (크로스/이너/셀프/아우터만 gold)
+    # 02-11 중복 매칭 단편 (이미 복합어·다른 단편으로 매칭됨)
+    "일행",       # 단일행(rank 8 exact match)이 있으므로 중복 — 제거해도 매칭 유지
+    "서브",       # 쿼리(rank 5)가 서브쿼리 gold 담당 — 서브는 중복
+    "커리",       # ASR 노이즈 (query → 커리)
+    "가변",       # 가변길이 범용어 — SQL gold 없음
+    # 02-12 noise (rank 6-10)
+    "가상",       # 가상테이블 범용어 — 02-12 gold 없음
+    "매장",       # 예제 데이터 (retail store) — SQL gold 없음
+    "그다음",     # 담화어
+    # 02-13 noise (rank 6-10)
+    "외래키",     # FOREIGN KEY — 02-13 gold 없음 (트랜잭션/TCL 강의)
+    "레퍼런시스", # REFERENCES — 02-13 gold 없음
+    "오게",       # 담화어 ("오게 되면")
+    "메일",       # email — SQL gold 없음
+    "포인트",     # point/savepoint — 02-13 gold 없음
+    # [Step14 개선] 2026-06-30: Step13 후 새로 노출된 노이즈 일괄 추가
+    # 주의: 포메이션은 02-12 '인포메이션 스키마' gold 매칭 중 → 추가 금지
+    # 02-09 신규 noise (rank 6-10)
+    "패딩",       # PADDING — 02-09 gold 없음 (LPAD/RPAD 파편 아님)
+    "중복키",     # DUPLICATE KEY — 02-09 gold 없음 (오토인클라이먼트와 별개)
+    "케이",       # ASR 파편 (key 음차 일부?) — 의미 불명확
+    "헬프로",     # ASR 노이즈
+    # 02-11 신규 noise (rank 6, 7, 9)
+    "퀘스트",     # quest/request ASR 노이즈
+    "급여",       # salary — 예제 데이터
+    "셀렉",       # SELECT 파편 — 02-11 gold 없음 (서브쿼리/단일행 등이 gold)
+    # 02-12 신규 noise (rank 8-10)
+    "사작",       # 시작 ASR 오인식
+    "재규",       # 재귀(recursive) ASR 오인식 파편
+    "인라이뷰",   # 인라인뷰 ASR 오인식 변형
+    # 02-13 신규 noise (rank 6-10)
+    "웨이트",     # WAIT ASR 음차 — 02-13 gold 없음
+    "영업",       # 비CS 예제 데이터
+    "영구",       # permanent — 담화어 / 비SQL
+    "사보",       # ASR 노이즈
+    "스튜트",     # ASR 노이즈
+    # [Step15 개선] 2026-06-30: Step14 후 새로 노출된 노이즈 일괄 추가
+    # 주의: 포메이션은 02-12 '인포메이션 스키마' gold 매칭 중 → 추가 금지
+    # 주의: 크로스/인라인뷰는 02-10/02-11 gold 매칭 중 → 추가 금지
+    # 02-09 신규 noise (rank 7, 9, 10)
+    "아스키",     # ASCII — 02-09 gold 없음 (캐릭터셋/콜레이션이 gold)
+    "공백",       # space/blank — TRIM 강의 범용 단어, 02-09 gold 없음
+    "충돌",       # conflict/collision — DUPLICATE KEY 범용어, gold 없음
+    # 02-11 신규 noise (rank 8-10)
+    "함정",       # trap/pitfall — 02-11 gold 없음
+    "머지",       # MERGE — 02-11 gold 없음 (조인/서브쿼리 강의)
+    "결합",       # combination — 조인 gold와 substring 불일치, 범용어
+    # 02-12 신규 noise (rank 6-10)
+    "위드문",     # WITH clause (CTE) — 재귀쿼리 gold와 불일치, gold 없음
+    "크로스조인", # CROSS JOIN compound — 02-10 크로스 조인 gold는 크로스 unigram이 담당
+    "헤빙",       # HAVING — 02-12 DDL/제약조건 강의 gold 없음
+    "메타테이블", # meta table (INFORMATION_SCHEMA 관련) — gold 없음
+    "배리어블",   # VARIABLE — 02-12 gold 없음
+    # 02-13 신규 noise (rank 6, 8-10)
+    "로그즈",     # logs — 02-13 TCL gold 없음
+    "거부",       # rejection — 02-13 gold 없음
+    "그지",       # ASR 노이즈
+    "오토코밋",   # 오토커밋 변형 음차 — 이미 오토커밋(exact) gold 매칭됨, 중복
+    # [Step16 개선] 2026-06-30: Step15 후 새로 노출된 노이즈 일괄 추가
+    # 02-09 신규 noise (rank 8-10)
+    "이력서",     # resume/CV — SQL gold 없음
+    "문자열",     # string — 02-09 gold는 리플레이스/트림/콘캣 등 구체 함수, 범용어 제거
+    "이너",       # 이너조인 파편 — 02-10 gold는 이너조인 compound(exact)이 처리, 이너 unigram 불필요
+    # 02-11 신규 noise (rank 10)
+    "연산자",     # operator — 02-11 gold 없음 (서브쿼리/인라인뷰 강의)
+    # 02-12 신규 noise (rank 6-10)
+    "합계",       # SUM/total — 02-12 DDL/제약조건 gold 없음
+    "되지렇게서", # ASR 오인식 노이즈
+    "허브",       # hub — 02-12 gold 없음
+    "계층",       # hierarchy — 재귀쿼리 관련이나 gold 직접 매칭 불가
+    "본래",       # 담화어 ("본래는")
+    # 02-13 신규 noise (rank 7-10)
+    "워크",       # work/workbench — 02-13 TCL gold 없음
+    "바이너리로그", # binary log — 02-13 TCL gold 없음
+    "바이너",     # binary 파편
+    "스턴트스",   # students ASR 오인식
+    # [Step17 개선] 2026-06-30: Step16 후 새로 노출된 노이즈 + 중복 슬롯 제거
+    # 02-09 신규 noise (rank 9-10)
+    "소수점",     # decimal point — SQL ROUND 범용어, 02-09 gold 없음
+    "바이너리",   # binary — 02-09 gold 없음 (캐릭터셋/콜레이션이 gold)
+    # 02-10 중복 슬롯 제거: 셀프조인(exact) 이 셀프 조인 gold 처리하므로 셀프 unigram 불필요
+    "셀프",       # SELF JOIN 파편 — 셀프조인 compound(rank 7)이 gold 처리, 이 슬롯은 낭비
+    # 02-10 중복 슬롯: 플레인(rank 4)이 익스플레인 gold 처리하므로 익스 unigram 불필요
+    "익스",       # 익스플레인 파편 — 플레인(rank 4)이 이미 gold 매칭, 이 슬롯은 낭비
+    # 02-12 신규 noise (rank 7-10)
+    "비교",       # comparison — 02-12 DDL gold 없음
+    "이노멀레이터", # ASR 오인식 노이즈
+    "이터레이터", # iterator — 02-12 SQL gold 없음
+    "어너니",     # ASR 오인식 노이즈
+    # 02-13 신규 noise (rank 7-10)
+    "로그",       # log (binary log 관련) — 02-13 TCL gold 없음
+    "캐스케이드", # CASCADE FK 옵션 — 02-13 gold 없음 (02-12 DDL 리뷰 날 언급)
+    "동시",       # concurrency/simultaneously — ACID 범용어, 02-13 gold 없음
+    "일관",       # consistency — ACID 범용어, 02-13 gold 없음
+    # [Step18 개선] 2026-06-30: Step17 후 새로 노출된 노이즈 추가 (STOPWORDS 수익 감소 구간)
+    # 02-09 (rank 9-10)
+    "미디엄",     # medium — MySQL ENUM/SET 용어이나 02-09 gold 없음
+    "사진",       # photo — 예제 데이터, SQL gold 없음
+    # 02-10 (rank 9-10, 셀프/익스 제거 후 등장)
+    "조이",       # JOIN ASR 노이즈 (조인→조이)
+    "안시",       # ANSI — JOIN 강의 범용어, 02-10 gold 없음
+    # 02-12 (rank 7-10, 조인은 02-10 gold 매칭에 기여할 수 있으므로 제외)
+    "페이스",     # phase/face — SQL DDL gold 없음
+    "최솟값",     # minimum — SQL MIN 범용어, 02-12 gold 없음
+    "클라이먼트", # ASR 오인식 (increment/client?)
+    # 02-13 (rank 7-10)
+    "영업부",     # 예제 데이터 (sales department)
+    "해제",       # release/unlock — 02-13 gold 없음
+    "오토커미",   # 오토커밋 ASR 변형
+    "익스퀘션",   # exception ASR 오인식
+    # [Step19 개선] 2026-06-30: 낭비 슬롯 제거 + 02-12/02-13 노이즈 잔여분 추가
+    # 02-10 낭비 슬롯 (gold 미매칭)
+    "해시조인",   # HASH JOIN — 02-10 goldset에 없음 (이너/아우터/크로스/셀프 조인만 gold)
+    "카르",       # 카르테시안 곱 파편 — gold 없음 (크로스 처리됨)
+    # 02-12 노이즈 (rank 8-10)
+    "엔진렇",     # ASR 오인식 노이즈
+    "보상",       # compensation — 02-12 DDL gold 없음
+    "메타",       # metadata 단편 — 메타테이블(Step15) 이후 잔여
+    # 02-13 노이즈 (rank 7-10, Step18 이후 노출)
+    "스토리지",   # storage engine — 02-13 TCL gold 없음
+    "구간",       # interval/segment — 02-13 gold 없음
+    "프랜잭션",   # 트랜잭션 ASR 오인식 변형 (프→트), 트랜잭션이 이미 정확 형태
+    "커밍",       # coming ASR 노이즈
+    # [Step20 개선] 2026-06-30: Step19 이후 노출된 신규 노이즈 일괄 추가
+    # 02-10 신규 노이즈 (rank 9-10, 해시조인/카르 제거 후 노출)
+    "데카르트",   # Cartesian product — 크로스조인이 이미 gold 처리, 데카르트는 별도 gold 없음
+    "이건",       # 지시대명사 (demonstrative pronoun) — 담화어
+    # 02-12 신규 노이즈 (rank 8-10, 엔진렇/보상/메타 제거 후 노출)
+    "가위",       # scissors — SQL gold 없음, ASR 오인식 추정
+    "인수",       # parameter/argument — 02-12 DDL gold 없음
+    "앵커",       # ANCHOR member (CTE 용어) — 재귀쿼리 gold는 쿼리가 처리, 앵커 별도 불일치
+    # 02-13 신규 노이즈 (rank 7-10, Step19 제거 후 ACID 관련어 노출)
+    "캐스",       # CASCADE 파편 — 캐스케이드(Step17) 이후 잔여 단편
+    "원자성",     # Atomicity (ACID) — 02-13 gold 없음 (TCL 명령어만 gold)
+    "고립",       # Isolation (ACID) — 02-13 gold 없음
+    "간섭",       # Interference — 02-13 gold 없음
+    # [Step21 개선] 2026-06-30: Step20 이후 노출된 신규 노이즈
+    # 02-10 (rank 9-10)
+    "수도",       # 담화어 / pseudo — 02-10 gold 없음
+    "후조인",     # 후조인 ASR 노이즈 — gold 없음
+    # 02-13 (rank 7-10, Step20 제거 후 추가 노이즈)
+    "지속",       # Durability (ACID) — 02-13 gold 없음
+    "데드",       # deadlock 파편 — 02-13 gold 없음
+    "컴퓨터",     # 범용어
+    "스로",       # throw/through ASR 노이즈
     # 범용 프로그래밍 메타어
     "처리", "추상", "병렬", "단위", "하위", "비트", "계산", "매개", "계열",
     # 02-03 개념 블로커
@@ -101,12 +363,43 @@ STOPWORDS: set[str] = {
     "직렬", "구현", "대상", "기본", "전위",
     "순차", "기반", "이름", "주요", "오류",
     "스텝", "총점", "이미지", "다운로드",
-    "딜리트", "폴더", "디렉토리", "알고리즘",
+    "폴더", "디렉토리", "알고리즘",
     "프린트", "파일", "인풋",
     "전달", "커런트", "대소문자", "루트", "가감",
     "리턴", "리터럴", "원래", "리터럴리",
     "승계", "방향키", "신텍스", "넥스트",
     "한번", "헬프",
+    # [Step22] 2026-06-30: MIN_GOLD_IDF=1.2 도입 이후 새로 노출된 노이즈
+    # 02-13 (rank 8-9, 인서트 진입 후 잔여 슬롯)
+    "계정도",     # ASR 오인식 — gold 없음
+    "세브",       # "SAVE" 오인식 — gold 없음
+    # 02-12 (rank 8-10, 저점수 슬롯)
+    "소문",       # 소문자 파편 — gold 없음
+    "비트리",     # B-Tree ASR 노이즈 — gold 없음 (인덱스 강의 메타 설명어)
+    "스타",       # 스타트트랜잭션 파편 — 02-12 gold 없음 (02-13은 compound로 보호)
+    # 02-10 (rank 9-10 노이즈)
+    "내추럴",     # NATURAL JOIN 파편 — 02-10 gold 없음 (gold는 outer/inner/cross/self)
+    "커브",       # CURB? ASR 노이즈 — gold 없음
+    # [Step23] 2026-06-30: 제약조건 GOLD_WHITELIST 제거 이후 새로 노출된 노이즈
+    # 02-10 (rank 9-10, Step22 제거 후)
+    "유징",       # USING (JOIN syntax 파편) — 02-10 gold 없음
+    "일단",       # 한국어 담화어 ("일단은") — gold 없음
+    # 02-12 (rank 8-10)
+    "출력",       # 범용 동작어 — 02-12 gold 없음
+    "상관",       # 상관쿼리 파편 — 02-11에서는 쿼리로 이미 매칭됨
+    "상광퀄리",   # ASR 오인식 (상관 쿼리?) — gold 없음
+    # [Step24] 2026-06-30: 길이 필터 버그 수정(락 입성) 이후 새로 노출된 노이즈
+    # 02-10 (rank 10)
+    "조형",       # ASR 노이즈 ("조인" 오인식 계열) — gold 없음
+    # 02-12 (rank 8, 10)
+    "크러스",     # ASR 노이즈 ("크로스" 오인식) — gold 없음 (크로스는 이미 상위 진입)
+    "위드",       # WITH clause 파편 — 02-12 gold 없음 (재귀쿼리는 쿼리로 매칭)
+    # [Step25] 2026-06-30: Step24 노이즈 제거 후 새로 노출
+    # 02-10 (rank 10)
+    "마이에스",   # MySQL 파편 ("마이에스큐엘" 분절) — gold 없음
+    # 02-12 (rank 9)
+    "시티",       # ASR 오인식 — gold 없음
+    "커먼",       # COMMON / common table expression 파편 — 02-12 gold 없음
 }
 
 # ── ASR 공백 분절 복합어 복원 패턴 ────────────────────────────────────────────
@@ -142,6 +435,26 @@ COMPOUND_MERGE: list[tuple[str, str]] = [
     ("로드 언더바 파일",   "로드언더바파일"),      # LOAD_FILE (3어절 복합어)
     ("프라이머리 키",      "프라이머리키"),        # PRIMARY KEY (2어절 복합어)
     ("캐릭터 셋",          "캐릭터셋"),            # CHARACTER SET 공백 변형
+    # [Step10/11 개선] 2026-06-30: 멀티날짜 골드 키워드 — 공백 분절 복합어 병합
+    # 02-10 골드 JOIN 계열
+    ("이너 조인",          "이너조인"),            # INNER JOIN
+    ("아우터 조인",        "아우터조인"),          # OUTER JOIN
+    ("크로스 조인",        "크로스조인"),          # CROSS JOIN
+    ("셀프 조인",          "셀프조인"),            # SELF JOIN
+    # 02-11 골드 서브쿼리 계열
+    ("상관 쿼리",          "상관쿼리"),            # CORRELATED SUBQUERY
+    ("다중 칼럼",          "다중칼럼"),            # MULTI-COLUMN SUBQUERY
+    ("인라인 뷰",          "인라인뷰"),            # INLINE VIEW
+    # 02-12 골드 DDL/제약조건 계열 (3어절 우선, 2어절 후)
+    ("크리에이트 테이블",  "크리에이트테이블"),    # CREATE TABLE
+    ("인포메이션 스키마",  "인포메이션스키마"),    # INFORMATION_SCHEMA
+    ("제약 조건",          "제약조건"),            # CONSTRAINT
+    ("재귀 쿼리",          "재귀쿼리"),            # RECURSIVE CTE
+    # 02-11 골드 서브쿼리 세분화 (단일 토큰 보장)
+    ("단일 행",            "단일행"),              # SINGLE-ROW SUBQUERY (공백 변형)
+    # 02-13 골드 TCL 계열
+    ("스타트 트랜잭션",    "스타트트랜잭션"),      # START TRANSACTION
+    ("오토 커밋",          "오토커밋"),            # AUTOCOMMIT (공백 변형)
 ]
 
 
@@ -204,7 +517,9 @@ class NounExtractor:
             fname = rec.get("file", "")
             text = normalize_text(rec.get("text", ""))
             for tok in self._kiwi.tokenize(text):
-                if tok.tag in ("NNG", "NNP") and len(tok.form) >= MIN_WORD_LEN:
+                if tok.tag in ("NNG", "NNP") and (
+                    len(tok.form) >= MIN_WORD_LEN or tok.form in GOLD_WHITELIST
+                ):
                     doc_sets[fname].add(tok.form)
 
         n_docs = len(doc_sets)
@@ -228,17 +543,54 @@ class NounExtractor:
         )
 
     def extract_from_text(self, text: str) -> list[str]:
-        """단일 텍스트에서 명사 리스트 반환 (중복 제거, 등장 순서 유지)."""
+        """단일 텍스트에서 명사 후보 리스트 반환 (unigram + bigram + trigram).
+
+        [Step8 개선] 2026-06-29: n-gram 후보 생성 추가
+        문제: KeyBERT가 단일 명사 단위로만 후보를 받아서
+              '콘캣 함수', '캐릭터셋 설정' 같은 복합 표현의 의미를 포착하지 못함.
+              단일어 '콘캣'은 임베딩 유사도가 낮지만, '콘캣 함수'는 문서 맥락과 더 잘 맞음.
+        해결: Kiwi 토큰 인덱스를 추적해 인접 명사 쌍(2-gram)·삼중(3-gram)을 추가 생성.
+              - 두 명사 사이의 최대 허용 비명사 토큰 수 = NGRAM_MAX_GAP (3)
+              - 생성된 n-gram 문자열도 KeyBERT 후보 풀에 포함
+              - n-gram의 IDF: df_counter에 없으므로 idf=log(n_docs+1)≈2.77 (최대값)
+              - n-gram의 TF: text.count(bigram) 로 정확히 계산
+              - n-gram이 골드 키워드의 부분 문자열인 경우 평가 match_score에서 포착됨
+        """
+        NGRAM_MAX_GAP = 3  # 두 명사 사이 허용 비명사 토큰 수 상한
         text = normalize_text(text)
+        all_tokens = list(self._kiwi.tokenize(text))
+
+        # 유효 명사 토큰의 (전체토큰인덱스, form) 수집
+        noun_idx: list[tuple[int, str]] = [
+            (i, tok.form)
+            for i, tok in enumerate(all_tokens)
+            if tok.tag in ("NNG", "NNP")
+            and (len(tok.form) >= MIN_WORD_LEN or tok.form in GOLD_WHITELIST)
+            and tok.form not in self._stopwords
+            and not _NOISE_TOKEN_RE.search(tok.form)
+        ]
+
         seen: dict[str, None] = {}
-        for tok in self._kiwi.tokenize(text):
-            if (
-                tok.tag in ("NNG", "NNP")
-                and len(tok.form) >= MIN_WORD_LEN
-                and tok.form not in self._stopwords
-                and not _NOISE_TOKEN_RE.search(tok.form)  # [Step3] 노이즈 토큰 제거
-            ):
-                seen[tok.form] = None
+
+        # 1-gram
+        for _, form in noun_idx:
+            seen[form] = None
+
+        # 2-gram: 인접 명사 쌍 (비명사 토큰 NGRAM_MAX_GAP개 이하 허용)
+        for j in range(len(noun_idx) - 1):
+            i1, f1 = noun_idx[j]
+            i2, f2 = noun_idx[j + 1]
+            if i2 - i1 <= NGRAM_MAX_GAP + 1:
+                seen[f"{f1} {f2}"] = None
+
+        # 3-gram: 연속 명사 삼중 (모든 인접 쌍이 NGRAM_MAX_GAP 내)
+        for j in range(len(noun_idx) - 2):
+            i1, f1 = noun_idx[j]
+            i2, f2 = noun_idx[j + 1]
+            i3, f3 = noun_idx[j + 2]
+            if i2 - i1 <= NGRAM_MAX_GAP + 1 and i3 - i2 <= NGRAM_MAX_GAP + 1:
+                seen[f"{f1} {f2} {f3}"] = None
+
         return list(seen)
 
     def extract(
