@@ -76,8 +76,8 @@ def _last_match(text: str, patterns: list[str]) -> dict | None:
 def build_summary_llm_payload(
     outro_lines: list[Utterance],
     prev_chars_summary: int = 200,
-    prev_chars_end: int = 800,
-    fallback_chars: int = 4000,
+    prev_chars_end: int = 400,
+    fallback_chars: int = 600,
     max_context_chars: int = 4000,
 ) -> dict:
     """outro_lines → LLM에 넘길 JSON 페이로드.
@@ -98,31 +98,33 @@ def build_summary_llm_payload(
     """
     section_text = re.sub(r"\s+", " ", " ".join(u.text for u in outro_lines)).strip()
 
+    # [Step 2] 우선순위 순으로 신호 키워드 탐지 (가장 마지막 등장 위치 기준)
     summary_match   = _last_match(section_text, _SUMMARY_PATTERNS)
     strong_end_match = _last_match(section_text, _STRONG_END_PATTERNS)
     weak_end_match  = _last_match(section_text, _WEAK_END_PATTERNS)
 
-    if summary_match:
+    if summary_match:                                           # summary_signal 우선
         start = max(0, summary_match["start"] - prev_chars_summary)
         extraction_type = "summary_signal"
         trigger = summary_match["matched_text"]
-    elif strong_end_match:
+    elif strong_end_match:                                      # strong_end
         start = max(0, strong_end_match["start"] - prev_chars_end)
         extraction_type = "strong_end"
         trigger = strong_end_match["matched_text"]
-    elif weak_end_match:
+    elif weak_end_match:                                        # weak_end
         start = max(0, weak_end_match["start"] - prev_chars_end)
         extraction_type = "weak_end"
         trigger = weak_end_match["matched_text"]
-    else:
+    else:                                                       # [Step 3] fallback
         start = max(0, len(section_text) - fallback_chars)
         extraction_type = "fallback"
         trigger = ""
 
     context = section_text[start:]
-    if len(context) > max_context_chars:
+    if len(context) > max_context_chars:                        # 상한 4000자
         context = context[:max_context_chars]
 
+    # [Step 4] LLM 평가용 chunk와 추출 메타데이터 반환
     return {
         "context": context,
         "extraction_type": extraction_type,
@@ -130,20 +132,33 @@ def build_summary_llm_payload(
     }
 
 
-OUTRO_MINUTES = 15
+OUTRO_RATIO = 0.08
+OUTRO_MIN_BLOCKS = 20
 
 
 def _extract_outro(df: pd.DataFrame) -> pd.DataFrame:
-    """timestamp 기준으로 마지막 OUTRO_MINUTES분 발화만 반환."""
-    df = df.copy()
-    df["_ts"] = pd.to_datetime(df["timestamp"], format="%H:%M:%S", errors="coerce")
-    t_max = df["_ts"].max()
-    cutoff = t_max - pd.Timedelta(minutes=OUTRO_MINUTES)
-    return df[df["_ts"] >= cutoff].drop(columns=["_ts"])
+    """파일 순서 기준 마지막 OUTRO_RATIO 비율 발화만 반환.
+
+    타임스탬프는 실제 clock time이라 시간 계산에 부적합하므로
+    라인 순서 기준으로 마지막 구간을 추출한다.
+    """
+    n = len(df)
+    last_n = max(OUTRO_MIN_BLOCKS, int(n * OUTRO_RATIO))
+    last_n = min(last_n, n)
+    return df.iloc[-last_n:].reset_index(drop=True)
 
 
 def run(df: pd.DataFrame) -> dict:
     """단일 강의 DataFrame → 수업 마무리 요약 컨텍스트 추출.
+
+    흐름:
+        [Step 1] 전체 발화의 마지막 8% (최소 20블록)를 종료 구간(outro)으로 추출
+        [Step 2] outro 텍스트에서 요약/종료 신호 키워드 탐지
+                 → summary_signal 감지 시 해당 지점 앞 200자부터 추출
+                 → strong_end / weak_end 감지 시 해당 지점 앞 400자부터 추출
+        [Step 3] 탐지 신호가 없으면 outro 마지막 600자를 fallback chunk로 사용
+                 (어느 경우든 최대 4000자로 상한 제한)
+        [Step 4] LLM 평가용 chunk와 추출 메타데이터 반환
 
     Args:
         df: 단일 강의 발화 DataFrame (텍스트 파일 1개분).
@@ -152,6 +167,7 @@ def run(df: pd.DataFrame) -> dict:
     Returns:
         {"chunk": str} — LLM에 넘길 요약 컨텍스트 텍스트.
     """
+    # [Step 1] 종료 구간 추출
     outro_df = _extract_outro(df)
     utterances = [
         Utterance(
@@ -162,6 +178,7 @@ def run(df: pd.DataFrame) -> dict:
         )
         for _, row in outro_df.iterrows()
     ]
+    # [Step 2-4] 신호 탐지 → 컨텍스트 추출 → 메타데이터 반환
     payload = build_summary_llm_payload(utterances)
     return {"chunk": payload["context"]}
 

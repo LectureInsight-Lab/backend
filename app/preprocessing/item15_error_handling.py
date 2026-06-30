@@ -19,42 +19,60 @@ import pandas as pd
 # ── Step 1: Regex 패턴 ──────────────────────────────────────────────────────
 
 _DIRECT = [
-    r"에러가?\s*(났|나|떴|뜨|잡|있|생)",
-    r"오류가?\s*(났|나|떴|뜨|잡|있|생)",
+    # 에러/오류 발생 — "났을 때"(가정), "나더라도"(조건) 제외
+    r"에러가?\s*(났(?!\s*을)|나(?!더라|면|도)|떴|뜨|잡|있|생)",
+    r"오류가?\s*(났(?!\s*을)|나(?!더라|면|도)|떴|뜨|잡|있|생)",
+    r"(에러|오류)\s*(가|이)?\s*발생(?!한다)",  # "발생한다"(설명) 제외
     r"에러\s*(메세지|메시지|코드|내용|보면|확인)",
     r"오류\s*(메세지|메시지|코드|내용|보면|확인)",
     r"(런타임|컴파일|문법)\s*(에러|오류)",
     r"워닝\s*(났|나|떴|뜨|잡|있)",
     r"(경고|warning)\s*(났|나|떴|뜨|있)",
     r"빨간\s*줄",
+    r"빨갛(지|게|다|아|어)",
     r"빨간색\s*(표시|밑줄|선)",
     r"null\s*pointer",
     r"exception\s*(났|나|떴|잡)",
+    r"제약\s*조건.{0,15}(위반|걸리|걸려)",
+    # 락 — "걸려 있는"(설명) 제외, 실제 상태/결과 표현만
+    r"(락|lock)\s*(이|이가)?\s*걸[려]\s*(있어|서|가지고|있고|버렸)",
+    r"(오토커밋|autocommit)",
+    r"(연결|접속)\s*(끊|죽|안\s*되)",
+    r"서버\s*(죽|꺼|끊)",
+    r"재접속",
 ]
 _SYMPTOM = [
-    r"안\s*나와(요|서|도)?",
+    r"안\s*나온(다|대요|잖아|대)?",
+    r"아무것도\s*안\s*나",
+    r"안\s*올라(와|오)",
     r"안\s*떠(요|서|도)?",
     r"안\s*실행(돼|되)",
     r"실행\s*안\s*(돼|되)",
     r"결과가?\s*(안\s*나|안\s*뜨|틀려|이상해)",
     r"막혔(어요?|는데)",
-    r"안\s*되는(데|거|건)",
-    r"안\s*(돼요|됩니다|되는\s*거)",
+    r"안\s*(돼요|됩니다)",
     r"왜\s*(이러|그러|안\s*되)",
-    r"(이게|이거)\s*문제",
+    r"(이게|이거)\s*문제(?![를로])",   # "문제를 낸"(숙제) 제외
     r"거기서\s*막히",
+    r"갑자기\s*(없어|사라|안\s*나)",
+    r"원래대로\s*(안\s*돌|돌아\s*가지\s*않)",
+    r"두\s*(개|번)\s*(나왔|나오|있어)",
+    r"(내용|값|결과|데이터)\s*(빠졌|누락|사라졌)",
+    r"빠져\s*(있어|나와|버렸|서)",
+    r"(값|내용|결과|데이터|행|컬럼|항목).{0,25}빠졌(어요?|는데|잖아)",
+    r"중복\s*(됩니다|됐어|돼요?|나와|발생)",
+    r"(잘못|오기입|오타)\s*(썼|입력|작성|된)",
+    r"(설치|install)\s*(안\s*됐|안\s*돼|되지\s*않)",
 ]
 _FIX = [
     r"(이렇게\s*하면|그렇게\s*하면)\s*안\s*(돼|됩니|되는)",
     r"(여기|이\s*부분|이거)\s*(수정|고쳐|바꿔)",
-    r"(수정|고쳐|다시\s*봐|다시\s*확인)(해|봐|야|하면|하세요)",
+    r"(수정|고쳐|다시\s*봐|다시\s*확인)(해(?!서)|봐|야|하면|하세요)",  # "수정해서"(연결어) 제외
     r"(왜\s*안\s*되냐|왜\s*에러|왜\s*오류)",
     r"(오류\s*잡|에러\s*잡|오류를\s*고|에러를\s*고)",
     r"다시\s*(해보|실행|확인)(해|봐|요)?",
 ]
 ALL_PATTERNS: list[str] = _DIRECT + _SYMPTOM + _FIX
-_ERROR_RE = re.compile("|".join(ALL_PATTERNS), re.IGNORECASE)
-
 
 def _find_hits(text: str) -> list[dict]:
     hits = []
@@ -66,6 +84,11 @@ def _find_hits(text: str) -> list[dict]:
                 "context": text[max(0, m.start() - 60): m.end() + 60],
             })
     return sorted(hits, key=lambda x: x["matched"])
+
+
+def _is_error_candidate(text: str) -> tuple[bool, list]:
+    hits = _find_hits(text)
+    return bool(hits), hits
 
 
 def _normalize(df: pd.DataFrame) -> pd.DataFrame:
@@ -98,15 +121,19 @@ def run(df: pd.DataFrame) -> dict:
     df = _normalize(df)
     chunks = df.to_dict(orient="records")
 
-    if "llm_label" in df.columns:
+    if "anchor_label" in df.columns:
+        practice = [c for c in chunks if c.get("anchor_label") == "실습"]
+    elif "llm_labels" in df.columns:
+        practice = [c for c in chunks if "실습" in (c.get("llm_labels") or [])]
+    elif "llm_label" in df.columns:
         practice = [c for c in chunks if c.get("llm_label") == "실습"]
     else:
         practice = chunks
 
     candidates = []
     for c in practice:
-        hits = _find_hits(c["text"])
-        if hits:
+        is_cand, hits = _is_error_candidate(c["text"])
+        if is_cand:
             candidates.append({
                 "file":        c["file"],
                 "anchor_dt":   c["anchor_dt"],
