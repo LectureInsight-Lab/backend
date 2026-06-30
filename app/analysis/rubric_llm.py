@@ -67,9 +67,12 @@ async def judge(system: str, user: str, sem: asyncio.Semaphore) -> dict:
     cfg = types.GenerateContentConfig(
         temperature=settings.llm_temperature,
         response_mime_type="application/json",
+        thinking_config=types.ThinkingConfig(thinking_budget=settings.llm_thinking_budget),
     )
     contents = f"{system}\n\n{user}"
     async with sem:
+        if settings.llm_delay_sec:
+            await asyncio.sleep(settings.llm_delay_sec)  # 무료 티어 RPM 회피용 throttle
         try:
             resp = await asyncio.to_thread(
                 _get_client().models.generate_content,

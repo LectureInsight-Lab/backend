@@ -78,6 +78,9 @@ async def _verify_one(client, sem: asyncio.Semaphore, idx: int, row: dict) -> di
                 config=types.GenerateContentConfig(
                     temperature=_LLM_TEMPERATURE,
                     system_instruction=verify["system"],
+                    thinking_config=types.ThinkingConfig(
+                        thinking_budget=settings.llm_thinking_budget
+                    ),
                 ),
             )
             raw = resp.text.strip()
@@ -120,6 +123,9 @@ async def _eval_criterion(client, criterion: str, row: dict) -> dict:
             config=types.GenerateContentConfig(
                 temperature=_LLM_TEMPERATURE,
                 response_mime_type="application/json",
+                thinking_config=types.ThinkingConfig(
+                    thinking_budget=settings.llm_thinking_budget
+                ),
             ),
         )
         parsed = json.loads(resp.text)

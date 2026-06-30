@@ -130,6 +130,21 @@ def run(
     sentences = sentencizer.build_sentences(build_utterances(kss_df))
     logger.info(f"[pipeline] Kiwi 문장화 완료 — {len(sentences)} 문장 (항목 2·3용)")
 
+    # 항목 7 공유 입력: keywords.json 자동 생성(KeyBERT, 날짜별 top-N) — item07 이 읽음.
+    # 실패해도(모델 로드 실패 등) 항목 7만 N/A 로 떨어지도록 방어; 전체 분석은 계속.
+    try:
+        from app.preprocessing.item07_keyword_pipeline import build_keywords_from_records
+
+        kw_date = txt_path.stem.split("_", 1)[0]  # item07 과 동일한 날짜 추출
+        kw_records = labeled_df.to_dict("records")
+        for r in kw_records:
+            r["file"] = f"{kw_date}_kw.txt"  # keyword_pipeline 의 fname.split('_')[0] == kw_date 보장
+        # 단일 강의(문서 1개)라 df_auto_stopwords=True 면 전 명사가 불용어로 제거됨 → 반드시 False
+        build_keywords_from_records(kw_records, df_auto_stopwords=False)
+        logger.info("[pipeline] keywords.json 생성 완료 (항목 7용)")
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"[pipeline] keywords.json 생성 실패 — 항목 7 N/A 처리: {type(e).__name__}: {e}")
+
     # ── 전체 항목 실행 + 병합 (항목 1→18 순차) ──────────────────
     inputs = {
         "kss": kss_df,
@@ -243,7 +258,7 @@ async def analyze_raw_text(
     raw_text: str,
     lecture_date: str,
     instructor_id: str,
-    concurrency: int = 10,
+    concurrency: int | None = None,   # None → settings.llm_concurrency (무료 티어면 .env에서 1)
     progress: ProgressSink | None = None,
 ):
     """STT 원문(raw_text) → ``InstructorScorecard``  (분석 라우트 진입점).
@@ -262,7 +277,10 @@ async def analyze_raw_text(
 
     from app.analysis import explainer, scorer
     from app.core.checklist import load_checklist
+    from app.core.config import settings
 
+    if concurrency is None:
+        concurrency = settings.llm_concurrency
     progress = progress or NULL_SINK
     logger.info(
         f"[pipeline] ▶ 실분석 시작 — instructor={instructor_id} date={lecture_date} "
