@@ -35,7 +35,7 @@ from app.analysis.templates import load_item_prompt
 from app.core.config import settings
 
 _LOOKBACK_MINUTES = 60
-_PROMPT_PATH      = "app/analysis/prompts/items/14_practice_link.yaml"
+_PROMPT_PATH      = "app/analysis/prompts/items/item14_practice_link.yaml"
 
 _EVAL_TEMPLATE: str = load_item_prompt(_PROMPT_PATH).get("eval_template", "")
 

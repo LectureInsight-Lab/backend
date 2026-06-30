@@ -10,7 +10,6 @@ import json
 
 from app.analysis import analyzer, pipeline
 from app.analysis.schemas import LectureDocument, Utterance
-from app.core.checklist import load_checklist
 
 
 def _patch_llm(monkeypatch, payload: dict):
@@ -30,21 +29,6 @@ def _doc() -> LectureDocument:
     ]
     return LectureDocument(lecture_date="2026-02-02", instructor_id="i", all_lines=lines,
                            intro_lines=lines[:10], middle_lines=lines[10:50], outro_lines=lines[50:])
-
-
-def test_analyze_item_parses_and_clamps(monkeypatch):
-    _patch_llm(monkeypatch, {"score": 9, "evidence": "x", "strengths": "s",
-                             "improvements": "i", "confidence": 2.0})
-    cl = load_checklist()
-    from app.analysis import behavior_tagger, embedder
-
-    doc = _doc()
-    behavior = behavior_tagger.tag(doc)
-    index = embedder.build_index(doc)
-    raw = asyncio.run(analyzer.analyze_item(cl.by_id(4), doc, index, behavior))
-    assert raw.item_id == 4
-    assert raw.score == 5.0           # 9 → 클램프 5
-    assert raw.confidence == 1.0      # 2.0 → 클램프 1
 
 
 def test_full_pipeline_mocked(monkeypatch):

@@ -1,46 +1,20 @@
-"""LLM 분석 (3단계) — Paper #2 기반 (Gemini).
+"""LLM 게이트웨이 (Gemini) — 캐싱 · 재시도 포함.
 
-18개 항목에 대해 비동기 병렬로 Gemini 를 호출하고 구조화 JSON 응답을 받는다.
+explainer(항목 해설)·narrative(종합 분석)가 공유하는 단일 LLM 호출 함수 ``_call_llm``.
+동일 (model, temperature, system, user) → ``.cache/llm`` 에 캐싱하고,
+tenacity 로 일시적 오류를 재시도한다.
 
-각 호출은:
-    1) ChecklistItem 의 context_strategy 로 컨텍스트 청크 결정
-       - intro / middle / outro → 해당 구간 발화를 청크로
-       - full_sample / keyword  → embedder.search(항목 쿼리, top_k)
-    2) BehaviorProfile 에서 해당 항목 BoW 카운트 추출
-    3) templates.build_messages 로 프롬프트 조립
-    4) Gemini generate_content (response_mime_type=application/json) 호출
-    5) LLMItemRaw 로 파싱
-
-- temperature 는 settings.llm_temperature 고정 (Paper #6)
-- tenacity 재시도 (일시적 오류)
-- 동일 (model, temp, system, user) → .cache/llm 캐싱
+NOTE: 옛 v2 18항목 분석 경로(analyze_item / analyze_lecture + behavior_tagger / ensemble)는
+제거되었다. 실제 항목 채점은 ``app/analysis/pipeline.py`` 와 항목별 모듈이 담당한다.
 """
 from __future__ import annotations
 
-import asyncio
 import hashlib
-import json
 from pathlib import Path
 
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from app.analysis import embedder, templates
-from app.analysis.schemas import (
-    BehaviorProfile,
-    IndexedChunk,
-    ItemBoW,
-    LectureDocument,
-    LectureIndex,
-    LLMItemRaw,
-)
-from app.core.checklist import Checklist, ChecklistItem, ContextStrategy
 from app.core.config import settings
-
-_SEGMENT_STRATEGIES = {
-    ContextStrategy.INTRO: "intro_lines",
-    ContextStrategy.MIDDLE: "middle_lines",
-    ContextStrategy.OUTRO: "outro_lines",
-}
 
 # Gemini 클라이언트 싱글턴 (지연 초기화 — 키/패키지 없는 환경에서 import 실패 방지)
 _client = None
@@ -55,43 +29,6 @@ def _get_client():
 
         _client = genai.Client(api_key=settings.api_key)
     return _client
-
-
-# ── 컨텍스트 선택 ─────────────────────────────────────────────
-def _segment_chunks(lines, chunk_lines: int, top_k: int) -> list[IndexedChunk]:
-    """구간 발화(intro/middle/outro)를 청크로 분할해 최대 top_k 개 반환."""
-    chunks: list[IndexedChunk] = []
-    for chunk_id, start in enumerate(range(0, len(lines), chunk_lines)):
-        window = lines[start : start + chunk_lines]
-        if not window:
-            continue
-        chunks.append(
-            IndexedChunk(
-                chunk_id=chunk_id,
-                start_timestamp=window[0].timestamp,
-                end_timestamp=window[-1].timestamp,
-                text=" ".join(u.text for u in window),
-                embedding=None,
-                line_indices=list(range(start, start + len(window))),
-            )
-        )
-    return chunks[:top_k]
-
-
-def _item_query(item: ChecklistItem) -> str:
-    """RAG 검색 쿼리 = 항목명 + 평가 기준(criteria) 결합."""
-    prompt = templates.load_item_prompt(item.prompt)
-    criteria = prompt.get("criteria") or []
-    return " ".join([item.name, *[str(c) for c in criteria]])
-
-
-def _select_chunks(item: ChecklistItem, document: LectureDocument, index: LectureIndex) -> list[IndexedChunk]:
-    seg_attr = _SEGMENT_STRATEGIES.get(item.context_strategy)
-    if seg_attr is not None:
-        lines = getattr(document, seg_attr)
-        return _segment_chunks(lines, settings.rag_chunk_lines, settings.rag_top_k)
-    # full_sample / keyword → 키워드 검색
-    return embedder.search(index, _item_query(item), settings.rag_top_k)
 
 
 # ── Gemini 호출 + 캐싱 ────────────────────────────────────────
@@ -123,6 +60,7 @@ async def _generate(system: str, user: str) -> str:
 
 
 async def _call_llm(messages: list[dict]) -> str:
+    """[{role: system}, {role: user}] → LLM 응답 문자열 (캐시 우선)."""
     system = next((m["content"] for m in messages if m["role"] == "system"), "")
     user = next((m["content"] for m in messages if m["role"] == "user"), "")
 
@@ -136,53 +74,3 @@ async def _call_llm(messages: list[dict]) -> str:
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         cache_file.write_text(raw, encoding="utf-8")
     return raw
-
-
-# ── 응답 파싱 ─────────────────────────────────────────────────
-def _parse_response(raw: str, item: ChecklistItem, chunks: list[IndexedChunk]) -> LLMItemRaw:
-    """JSON 문자열 → LLMItemRaw (필드 보정·클램프)."""
-    text = raw.strip()
-    if text.startswith("```"):                # 코드펜스 방어
-        text = text.strip("`")
-        text = text.split("\n", 1)[-1] if "\n" in text else text
-    data = json.loads(text)
-
-    score = max(1.0, min(5.0, float(data.get("score", 3.0))))
-    confidence = max(0.0, min(1.0, float(data.get("confidence", 0.5))))
-    return LLMItemRaw(
-        item_id=item.id,
-        score=score,
-        evidence=str(data.get("evidence", "")),
-        strengths=str(data.get("strengths", "")),
-        improvements=str(data.get("improvements", "")),
-        confidence=confidence,
-        used_chunk_ids=[c.chunk_id for c in chunks],
-    )
-
-
-# ── 단일/전체 분석 ────────────────────────────────────────────
-async def analyze_item(
-    item: ChecklistItem,
-    document: LectureDocument,
-    index: LectureIndex,
-    behavior: BehaviorProfile,
-) -> LLMItemRaw:
-    """단일 항목 LLM 분석."""
-    chunks = _select_chunks(item, document, index)
-    bow = behavior.items.get(item.id, ItemBoW())
-    messages = templates.build_messages(item, chunks, bow, document=document, top_k=settings.rag_top_k)
-    raw = await _call_llm(messages)
-    return _parse_response(raw, item, chunks)
-
-
-async def analyze_lecture(
-    document: LectureDocument,
-    index: LectureIndex,
-    behavior: BehaviorProfile,
-    checklist: Checklist,
-) -> list[LLMItemRaw]:
-    """18개 항목 병렬 분석."""
-    results = await asyncio.gather(
-        *[analyze_item(it, document, index, behavior) for it in checklist.items]
-    )
-    return list(results)
