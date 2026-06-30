@@ -20,20 +20,17 @@
 
 ## 2. 워크플로우
 
-```
-┌────────────────────┐    ┌───────────────────────────────┐    ┌────────────────────┐
-│ 1. 강의 텍스트 업로드│ →  │ 2. 분석 진행률 표시              │ → │ 3. 결과 화면        │
-│  (또는 코스 ID 지정) │    │   8% 전처리 → 16% 라벨링         │    │  • 종합 점수 5점만점 │
-│                    │    │   → 16~92% 항목별 채점 → 100%   │    │  • 카테고리별 점수   │
-│                    │    │                              │    │  • 18 항목 상세      │
-└────────────────────┘    └───────────────────────────────┘    │  • 자연어 종합 해설  │
-                                                              │  • 리포트 다운로드    │
-                                                              │    (HTML / DOCX)    │
-                                                              └────────────────────┘
+
+```mermaid
+flowchart LR
+    A["1 · 강의 텍스트 업로드<br/>(또는 코스 ID 지정)"]
+    B["2 · 분석 진행률 표시<br/>8% 전처리 → 16% 라벨링<br/>→ 16~92% 항목별 채점 → 100%"]
+    C["3 · 결과 화면<br/>종합 · 카테고리 · 18항목 점수<br/>자연어 해설 · 리포트 다운로드(HTML/DOCX)"]
+    A --> B --> C
 ```
 
 분석 한 건은 보통 **수십 초~수 분**이 걸립니다 (강의 길이·Gemini 응답 속도에 따라).
-대시보드는 **백그라운드 분석**을 시작한 뒤 진행률을 폴링하므로, 창을 두고 다른 작업을 해도 됩니다.
+프론트엔드는 **백그라운드 분석**을 시작한 뒤 진행률을 폴링하므로, 창을 두고 다른 작업을 해도 됩니다.
 
 ---
 
@@ -169,45 +166,17 @@ curl http://localhost:8000/api/v1/analysis/job/abc123...
 
 ### 7-1. 한 번 들어온 강의가 거치는 5단계
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ 입력: STT 텍스트 (raw_text 직접 또는 paths.yaml + course_id 로 외부 파일)        │
-└──────────────────────────────────┬───────────────────────────────────────────┘
-                                   │
-        ┌──────────────────────────▼──────────────────────────┐
-        │ ① 공유 입력 준비 (강의당 1회)                          │
-        │  utils.parse_and_split  → kss        (KSS 문장 분리)   │
-        │  utils.label_from_csv   → labeled    (개념/예시/실습)  │
-        │  sentencizer.build_*    → sentences  (Kiwi+완결성)     │
-        │  item07_keyword_pipeline → keywords.json (KeyBERT)    │
-        └──────────────────────────┬──────────────────────────┘
-                                   │
-        ┌──────────────────────────▼──────────────────────────┐
-        │ ② 18개 항목 채점 (1→18 순차, Gemini rate-limit 보호)   │
-        │  각 항목 모듈은 4가지 입력 중 하나를 받아 점수+근거 반환  │
-        │  pipeline._ITEMS 가 18개 항목을 한 곳에서 등록·실행      │
-        └──────────────────────────┬──────────────────────────┘
-                                   │ details(점수+근거) · chunk(부가)
-        ┌──────────────────────────▼──────────────────────────┐
-        │ ③ 스코어카드 만들기 (scorer)                          │
-        │  카테고리별 평균 → 가중 평균 → 종합 점수              │
-        │  누적 이력으로 선형 회귀 → 트렌드(향상/유지/하락)       │
-        └──────────────────────────┬──────────────────────────┘
-                                   │ InstructorScorecard
-        ┌──────────────────────────▼──────────────────────────┐
-        │ ④ 자연어 해설 부착 (explainer, Gemini 1회)             │
-        │  각 항목의 grounds·reason·strengths·improvements    │
-        │  를 사람이 읽기 쉬운 코칭 문장으로 채움                 │
-        └──────────────────────────┬──────────────────────────┘
-                                   │
-        ┌──────────────────────────▼──────────────────────────┐
-        │ ⑤ 영속화 + 응답 (store.save → JSON)                  │
-        │  data/processed/scorecards/{instructor}/{date}.json │
-        └──────────────────────────┬──────────────────────────┘
-                                   │
-                  JSON 응답  /  리포트 생성(`/report/generate`)
-                              · Streamlit 대시보드
-                              · Next.js 프론트 — `narrative` 호출로 종합 해설 추가
+
+```mermaid
+flowchart TD
+    IN["입력: STT 텍스트<br/>(raw_text 직접 또는 paths.yaml + course_id 로 외부 파일)"]
+    S1["① 공유 입력 준비 (강의당 1회)<br/>parse_and_split → kss (KSS 문장 분리)<br/>label_from_csv → labeled (개념/예시/실습)<br/>sentencizer → sentences (Kiwi+완결성)<br/>item07_keyword_pipeline → keywords.json (KeyBERT)"]
+    S2["② 18개 항목 채점 (1→18 순차, Gemini rate-limit 보호)<br/>각 항목이 4가지 입력 중 하나로 점수+근거 반환<br/>pipeline._ITEMS 가 18개 항목을 한 곳에서 등록·실행"]
+    S3["③ 스코어카드 만들기 (scorer)<br/>카테고리별 평균 → 가중 평균 → 종합 점수<br/>누적 이력으로 선형 회귀 → 트렌드(향상/유지/하락)"]
+    S4["④ 자연어 해설 부착 (explainer, Gemini 1회)<br/>각 항목의 grounds·reason·strengths·improvements"]
+    S5["⑤ 영속화 + 응답 (store.save → JSON)<br/>data/processed/scorecards/{instructor}/{date}.json"]
+    OUT["JSON 응답 · 리포트 생성(/report/generate)<br/>· Next.js 프론트(narrative 호출로 종합 해설 추가)"]
+    IN --> S1 --> S2 -->|"details(점수+근거) · chunk(부가)"| S3 -->|InstructorScorecard| S4 --> S5 --> OUT
 ```
 
 ### 7-2. API 시퀀스 (Mermaid)
@@ -258,21 +227,13 @@ sequenceDiagram
 
 ### 7-4. 4가지 공유 입력 (`pipeline._ITEMS` 의 두 번째 컬럼)
 
-```
-┌─────────┬───────────────────────────────────────────────────────────────────┐
-│  kss    │ KSS 문장 분리 결과 DataFrame (timestamp·elapsed_sec·text 등)        │
-│         │ → 학습목표/복습연계/마무리/발화속도/이해확인/참여유도/질문응답          │
-├─────────┼───────────────────────────────────────────────────────────────────┤
-│ labeled │ 개념/예시/실습으로 라벨링된 청크 DataFrame (Gemini 1회 호출 결과)      │
-│         │ → 설명순서/개념정의/비유예시/예시적절성/실습연계/오류대응               │
-├─────────┼───────────────────────────────────────────────────────────────────┤
-│sentences│ Kiwi 문장화 결과(완결성·EF/EC 태그 포함)                              │
-│         │ → 발화완결성/언어일관성                                              │
-├─────────┼───────────────────────────────────────────────────────────────────┤
-│txt_path │ 원본 STT 텍스트 파일 경로 (모듈 내부에서 직접 파싱)                    │
-│         │ → 반복표현/핵심강조/선행개념 확인                                     │
-└─────────┴───────────────────────────────────────────────────────────────────┘
-```
+
+| 입력 종류 | 내용 | 사용 항목 |
+|---|---|---|
+| `kss` | KSS 문장 분리 결과 DataFrame (timestamp·elapsed_sec·text 등) | 학습목표 · 복습연계 · 마무리 · 발화속도 · 이해확인 · 참여유도 · 질문응답 |
+| `labeled` | 개념/예시/실습으로 라벨링된 청크 DataFrame (Gemini 1회 호출 결과) | 설명순서 · 개념정의 · 비유예시 · 예시적절성 · 실습연계 · 오류대응 |
+| `sentences` | Kiwi 문장화 결과 (완결성·EF/EC 태그 포함) | 발화완결성 · 언어일관성 |
+| `txt_path` | 원본 STT 텍스트 파일 경로 (모듈 내부에서 직접 파싱) | 반복표현 · 핵심강조 · 선행개념 확인 |
 
 ### 7-5. 비동기 ↔ 순차 — 의도된 설계 변경
 
@@ -389,7 +350,7 @@ backend/
 │   │   ├── scorer.py              # 카테고리 가중 평균 + 트렌드 + 주차 집계
 │   │   ├── schemas.py             # Utterance / Sentence / InstructorScorecard / ItemScore
 │   │   ├── embedder.py            # ★ KR-SBERT 임베딩 유틸 (item11·item14 가 사용) — 사용 중
-│   │   ├── templates.py           # load_item_prompt (item14 가 사용) + build_messages(미사용 경로)
+│   │   ├── templates.py           # load_item_prompt (item14 가 사용)
 │   │   ├── emphasis_checker.py    # item07 강조 판정 보조
 │   │   ├── item01_repetition.py
 │   │   ├── item04_learning_objectives.py
@@ -404,15 +365,12 @@ backend/
 │   │   ├── item14_practice_link.py
 │   │   ├── item15_error_handling.py
 │   │   ├── item18_question.py
-│   │   ├── prompts/items/         # 항목 LLM 프롬프트 (item04~item18 + 14_practice_link.yaml)
-│   │   └── (behavior_tagger.py / ensemble.py — 구현됐으나 import 0건, 죽은 v2-앙상블 경로)
+│   │   └── prompts/items/         # 항목 LLM 프롬프트 (item04~item18 + README.md)
 │   ├── report/
 │   │   ├── report_generator.py    # OUTPUT_ROOT, generate(scorecard, formats)
 │   │   ├── charts.py              # 레이더 / 추이 차트
 │   │   ├── html.py                # Jinja2
 │   │   └── docx.py                # python-docx
-│   ├── dashboard/
-│   │   └── app.py                 # (선택) Streamlit 대시보드
 │   ├── main.py                    # FastAPI 부트스트랩
 │   ├── models/ / utils/           # placeholder
 ├── configs/
@@ -420,9 +378,7 @@ backend/
 │   ├── item_rubrics.yaml          # 항목별 채점 기준(criterion/high/low/caveat) — explainer·narrative 주입용
 │   ├── kiwi_user_dict.yaml        # Kiwi 사용자 사전
 │   ├── paths.example.yaml         # paths.yaml 템플릿
-│   ├── paths.yaml                 # ★ 외부 STT 경로 (gitignore 권장)
-│   └── (bow_indicators.yaml / few_shot_examples.yaml
-│        — 죽은 v2-앙상블 경로(behavior_tagger/templates.build_messages)만 로드 → 런타임 미사용)
+│   └── paths.yaml                 # ★ 외부 STT 경로 (gitignore 권장)
 ├── data/                          # 원본/처리 데이터 (gitignore)
 │   ├── raw/                       # STT 원본 .txt
 │   └── processed/
@@ -500,12 +456,10 @@ LLM_CONCURRENCY=10                # 무료 티어면 1, 유료면 5~10
 
 # 서버
 APP_HOST=0.0.0.0                  # uvicorn 바인드
-APP_HOST_PUBLIC=localhost         # 브라우저 접속용 (Streamlit/프론트 표시용)
 APP_PORT=8000
-DASHBOARD_PORT=8501
 
-# CORS (Next.js / Streamlit 허용)
-CORS_ORIGINS=http://localhost:3000,http://localhost:8501
+# CORS (Next.js 프론트엔드 허용)
+CORS_ORIGINS=http://localhost:3000
 ```
 
 ---
