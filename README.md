@@ -271,7 +271,8 @@ sequenceDiagram
 | GET | `/report/download/{file_id}` | 파일 다운로드 (`{instructor}__{date}__{fmt}`) |
 
 ### 헬스체크
-
+| 메서드 | 경로 | 용도 |
+|---|---|---|
 | GET | `/health` | `{"status":"ok"}` |
 
 ### 요청 페이로드 예 (`/analysis/lecture/async`)
