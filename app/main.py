@@ -4,35 +4,25 @@
 분석을 실행하고 결과를 조회한다.
 """
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
 from app.api.routes import analysis, health, report
 from app.core.config import settings
+
+
 
 
 def create_app() -> FastAPI:
     app = FastAPI(
         title="LectureInsight API",
-        description=(
-            "강의 스크립트 분석 및 강사 리포트 생성 API (v2). "
-            "RAG + BoW 앙상블 기반 18개 항목 평가."
-        ),
+        description=("강의 스크립트 분석 및 강사 리포트 생성 API."),
         version="0.2.0",
     )
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origin_list,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
-    app.include_router(health.router, tags=["health"])
-    app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["analysis"])
-    app.include_router(report.router, prefix="/api/v1/report", tags=["report"])
+    app.include_router(health.router)
+    app.include_router(analysis.router, prefix="/api/v1")
+    app.include_router(report.router, prefix="/api/v1")
 
     return app
 
-
 app = create_app()
+
+

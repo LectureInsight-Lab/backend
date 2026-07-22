@@ -93,57 +93,57 @@ class LectureDocument(BaseModel):
     violation_count: int = 0          # 항목 3 원지표 (비지배 말투 문장 수)
 
 
-# ─── 2-A단계: BoW 행동 태깅 산출물 ───────────────────────────
-class ItemBoW(BaseModel):
-    """단일 항목의 BoW 집계."""
-
-    positive_count: int = 0
-    negative_count: int = 0
-    bow_score: float = 0.0       # 1~5 정규화, 0이면 근거 없음
-
-
-class BehaviorProfile(BaseModel):
-    """18개 항목의 BoW 결과 묶음."""
-
-    lecture_date: str
-    instructor_id: str
-    items: dict[int, ItemBoW]    # {item_id: ItemBoW}
-
-
-# ─── 2-B단계: RAG 인덱싱 산출물 ──────────────────────────────
-class IndexedChunk(BaseModel):
-    """임베딩된 청크 (15행 기본)."""
-
-    chunk_id: int
-    start_timestamp: str
-    end_timestamp: str
-    text: str
-    embedding: list[float] | None = None   # 캐싱 시 None 가능
-    line_indices: list[int]                # 원본 all_lines 인덱스
+# ─── 2-A단계: BoW 행동 태깅 산출물 (미사용 — 참조 0건, behavior_tagger.py 제거됨) ──
+# class ItemBoW(BaseModel):
+#     """단일 항목의 BoW 집계."""
+#
+#     positive_count: int = 0
+#     negative_count: int = 0
+#     bow_score: float = 0.0       # 1~5 정규화, 0이면 근거 없음
+#
+#
+# class BehaviorProfile(BaseModel):
+#     """18개 항목의 BoW 결과 묶음."""
+#
+#     lecture_date: str
+#     instructor_id: str
+#     items: dict[int, ItemBoW]    # {item_id: ItemBoW}
 
 
-class LectureIndex(BaseModel):
-    """강의 1편 분량 벡터 인덱스."""
+# ─── 2-B단계: RAG 인덱싱 산출물 (미사용 — 참조 0건, embedder.py 경로 미사용) ──
+# class IndexedChunk(BaseModel):
+#     """임베딩된 청크 (15행 기본)."""
+#
+#     chunk_id: int
+#     start_timestamp: str
+#     end_timestamp: str
+#     text: str
+#     embedding: list[float] | None = None   # 캐싱 시 None 가능
+#     line_indices: list[int]                # 원본 all_lines 인덱스
+#
+#
+# class LectureIndex(BaseModel):
+#     """강의 1편 분량 벡터 인덱스."""
+#
+#     lecture_date: str
+#     chunks: list[IndexedChunk]
+#
+#     class Config:
+#         # 임베딩 배열이 크니 직렬화 시 주의
+#         arbitrary_types_allowed = True
 
-    lecture_date: str
-    chunks: list[IndexedChunk]
 
-    class Config:
-        # 임베딩 배열이 크니 직렬화 시 주의
-        arbitrary_types_allowed = True
-
-
-# ─── 3단계: LLM 분석 산출물 (raw) ────────────────────────────
-class LLMItemRaw(BaseModel):
-    """LLM 원본 JSON 응답 (단일 항목)."""
-
-    item_id: int
-    score: float = Field(ge=1.0, le=5.0)
-    evidence: str                # 근거 인용 (원문 발췌)
-    strengths: str
-    improvements: str
-    confidence: float = Field(ge=0.0, le=1.0)
-    used_chunk_ids: list[int] = Field(default_factory=list)  # RAG 추적
+# ─── 3단계: LLM 분석 산출물 (raw) (미사용 — 참조 0건, ensemble.py 제거됨) ──
+# class LLMItemRaw(BaseModel):
+#     """LLM 원본 JSON 응답 (단일 항목)."""
+#
+#     item_id: int
+#     score: float = Field(ge=1.0, le=5.0)
+#     evidence: str                # 근거 인용 (원문 발췌)
+#     strengths: str
+#     improvements: str
+#     confidence: float = Field(ge=0.0, le=1.0)
+#     used_chunk_ids: list[int] = Field(default_factory=list)  # RAG 추적
 
 
 # ─── 4단계: 앙상블 산출물 (final) ────────────────────────────
