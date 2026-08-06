@@ -10,22 +10,19 @@ dependencies = [
     "pydantic>=2.9.0",
     "pydantic-settings>=2.5.0",
     "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.9",   # Form/File 업로드 파싱 (analysis 라우트) — FastAPI가 런타임에 요구
     # LLM (Gemini)
     "google-genai>=1.0.0",       # Gemini API 클라이언트 (신 SDK, .env 의 API_KEY / models/gemini-*)
     "google-generativeai>=0.8.0",  # 구 SDK — preprocessing/utils.py 가 아직 사용 (deprecated, 추후 신 SDK로 통일 필요)
     "tenacity>=9.0.0",            # 재시도 (LLM 호출 안정화)
     # NLP / Data
-    "numpy>=1.26.0",
+    "numpy>=1.26.0",              # scorer.py 트렌드 회귀 (np.polyfit)
     "pandas>=2.2.0",
-    "scikit-learn>=1.5.0",        # 코사인 유사도, 선형 회귀
     # Korean NLP
-    "konlpy>=0.6.0",
-    "nltk>=3.9.0",
     "kiwipiepy>=0.17.0",          # Kiwi 형태소 분석 (항목 2·3 EF/EC 판정) — Mecab 대체 (2026-06-22)
     "kss>=4.5,<5",                # KSS 문장 분리 (공유 입력 parse_and_split, backend="auto") — utils.py. 5.x는 API 변경되어 4.x 고정
     # Visualization
-    "matplotlib>=3.9.0",
-    "plotly>=5.24.0",
+    "matplotlib>=3.9.0",          # app/report/charts.py
     # Reports
     "jinja2>=3.1.0",
     "python-docx>=1.1.0",

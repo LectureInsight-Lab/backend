@@ -1,0 +1,45 @@
+# 빌드 컨텍스트에서 제외 — 이미지 용량·빌드 시간에 직결
+# (COPY 대상이 아니어도, 컨텍스트가 크면 빌드 시작 자체가 느려짐)
+
+# 가상환경 (호스트 전용, 컨테이너에선 무의미 + 매우 큼)
+venv/
+.venv/
+
+# 데이터 (보안서약서: 실데이터 이미지에 포함 금지)
+data/raw/*
+data/processed/*
+data/metadata/*
+data/gold/*
+outputs/
+
+# 시크릿 — 절대 이미지에 넣지 않는다. 런타임에 주입.
+.env
+.env.local
+*.key
+credentials.json
+
+# 개발 산출물
+notebooks/
+evaluation/
+tests/
+docs/
+scripts/
+.git/
+.idea/
+.vscode/
+
+# Python 캐시
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# LLM 응답 캐시 (런타임 생성물)
+.cache/
+
+# OS
+.DS_Store
+*.log
