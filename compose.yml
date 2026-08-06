@@ -1,0 +1,29 @@
+name: somin-lectureinsight
+
+services:
+  backend:
+    build:
+      context: ${BACKEND_DIR:-.}
+    env_file:
+      - ${BACKEND_DIR:-.}/.env
+    restart: unless-stopped
+    expose:
+      - "8000"
+    volumes:
+      - ${BACKEND_DIR:-.}/data:/app/data
+
+  frontend:
+    build:
+      context: ${FRONTEND_DIR:-../frontend}
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ""
+        INTERNAL_API_BASE_URL: http://backend:8000
+    environment:
+      INTERNAL_API_BASE_URL: http://backend:8000
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${PUBLIC_PORT:-3001}:3000"
+
